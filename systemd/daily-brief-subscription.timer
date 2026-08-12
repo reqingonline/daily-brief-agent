@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh subscriptions 15 minutes before briefing generation
+
+[Timer]
+OnCalendar=*-*-* 10,22:45:00
+Persistent=true
+AccuracySec=1s
+Unit=daily-brief-subscription.service
+
+[Install]
+WantedBy=timers.target

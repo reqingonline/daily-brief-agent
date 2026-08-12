@@ -1,0 +1,18 @@
+[Unit]
+Description=Generate, validate, and send the daily briefing
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dailybrief
+Group=dailybrief
+WorkingDirectory=/opt/daily-brief-agent
+Environment=TZ=Asia/Shanghai
+EnvironmentFile=-/opt/daily-brief-agent/.env
+UMask=0077
+TimeoutStartSec=90min
+ExecStart=/opt/daily-brief-agent/scripts/run-daily-brief.sh
+
+[Install]
+WantedBy=multi-user.target

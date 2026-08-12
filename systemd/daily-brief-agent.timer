@@ -1,0 +1,11 @@
+[Unit]
+Description=Start daily briefing generation at 11:00 and 23:00 China time
+
+[Timer]
+OnCalendar=*-*-* 11,23:00:00
+Persistent=true
+AccuracySec=1s
+Unit=daily-brief-agent.service
+
+[Install]
+WantedBy=timers.target

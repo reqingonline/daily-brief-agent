@@ -1,0 +1,18 @@
+[Unit]
+Description=Refresh Gmail briefing subscriptions
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dailybrief
+Group=dailybrief
+WorkingDirectory=/opt/daily-brief-agent
+Environment=TZ=Asia/Shanghai
+EnvironmentFile=-/opt/daily-brief-agent/.env
+UMask=0077
+TimeoutStartSec=15min
+ExecStart=/opt/daily-brief-agent/scripts/run-subscription-preflight.sh
+
+[Install]
+WantedBy=multi-user.target
