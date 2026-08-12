@@ -157,7 +157,7 @@ git commit -m "feat: add validated repair orchestration"
 
 - [ ] **Step 1: Create generic units**
 
-Use service user `dailybrief`, installation root `/opt/daily-brief-agent`, `UMask=0077`, network-online ordering, and bounded service timeouts. Schedule subscription preflight at `10,22:45:00` and generation at `11,23:00:00`, both with `Persistent=true`.
+Use service user `dailybrief`, installation root `/opt/daily-brief-agent`, `UMask=0077`, network-online ordering, and bounded service timeouts. Schedule subscription preflight at `10,22:45:00 Asia/Shanghai` and generation at `11,23:00:00 Asia/Shanghai`, both with `Persistent=true`.
 
 - [ ] **Step 2: Document installation and rollback**
 

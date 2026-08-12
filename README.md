@@ -54,7 +54,7 @@ date +%s > state/subscription-preflight.ok
 DAILY_BRIEF_DRY_RUN=1 ./scripts/run-daily-brief.sh
 ```
 
-真实部署、Gmail OAuth、systemd 和回滚步骤见 [部署文档](docs/deployment.md)。
+真实部署、Gmail OAuth、systemd 和回滚步骤见 [部署文档](docs/deployment.md)。提示词分层、资料信任边界、质量规则和自动修复机制见 [模型设计](docs/model-design.md)。
 
 ## 配置边界
 
