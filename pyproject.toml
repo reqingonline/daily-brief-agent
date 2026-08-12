@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daily-brief-agent"
+version = "0.1.0"
+description = "A source-diverse AI daily briefing pipeline with validation, repair, subscriptions, and SMTP delivery."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "XiaoRe" }]
+dependencies = [
+  "google-api-python-client==2.178.0",
+  "google-auth-oauthlib==1.2.2",
+  "google-auth-httplib2==0.2.0",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Communications :: Email",
+]
+
+[project.urls]
+Repository = "https://github.com/reqingonline/daily-brief-agent"
+Issues = "https://github.com/reqingonline/daily-brief-agent/issues"
+
+[project.scripts]
+daily-brief-collect = "daily_brief_agent.source_collector:main"
+daily-brief-validate = "daily_brief_agent.validate_brief:main"
+daily-brief-send = "daily_brief_agent.smtp_send:main"
+daily-brief-subscriptions = "daily_brief_agent.gmail_subscription_manager:main"
+daily-brief-gmail-auth = "daily_brief_agent.gmail_oauth_setup:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
