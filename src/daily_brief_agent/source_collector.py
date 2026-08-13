@@ -331,6 +331,17 @@ MARKET_SYMBOLS = [
     {"key": "BABA", "cnbc": "BABA", "yahoo": "BABA"},
 ]
 
+BUZZING_FEEDS = [
+    ("Buzzing HN", "https://hn.buzzing.cc/feed.xml", "technology_science"),
+    ("Buzzing Product Hunt", "https://ph.buzzing.cc/feed.xml", "consumer_technology"),
+    ("Buzzing World News", "https://news.buzzing.cc/feed.xml", "world_affairs"),
+    ("Buzzing New York Times", "https://nytimes.buzzing.cc/feed.xml", "world_affairs"),
+]
+BUZZING_MAX_AGE_HOURS = 48
+BUZZING_PER_SOURCE = 6
+BUZZING_LIMIT = 12
+BUZZING_SELECTION_LIMIT = 3
+
 
 class FetchError(RuntimeError):
     pass
@@ -366,6 +377,16 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def _iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z") if value else None
+
+
+def _is_http_url(value: str) -> bool:
+    parsed = urllib.parse.urlsplit(value.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _is_buzzing_url(value: str) -> bool:
+    hostname = (urllib.parse.urlsplit(value).hostname or "").lower().rstrip(".")
+    return hostname == "buzzing.cc" or hostname.endswith(".buzzing.cc")
 
 
 def fetch_text(
@@ -411,6 +432,9 @@ def parse_feed(
     source_url: str,
     now: datetime,
     max_age_hours: int = 36,
+    *,
+    source_type: str = "publisher",
+    prefer_external_link: bool = False,
 ) -> list[dict[str, Any]]:
     try:
         root = ET.fromstring(xml_text)
@@ -421,16 +445,22 @@ def parse_feed(
         if _local_name(node.tag) not in {"item", "entry"}:
             continue
         values: dict[str, str] = {}
-        link = ""
+        links: list[str] = []
         for child in list(node):
             name = _local_name(child.tag)
             text = "".join(child.itertext()).strip()
             if name == "link":
-                link = child.attrib.get("href") or text or link
+                link = child.attrib.get("href") or text
+                if link:
+                    links.append(link.strip())
             elif name in {"title", "description", "summary", "pubdate", "published", "updated"}:
                 values.setdefault(name, text)
         title = _clean_text(values.get("title"), 260)
-        url = link.strip()
+        links = [link for link in links if _is_http_url(link)]
+        original_url = None
+        if prefer_external_link:
+            original_url = next((link for link in links if not _is_buzzing_url(link)), None)
+        url = original_url or (links[0] if links else "")
         published = _parse_datetime(
             values.get("pubdate") or values.get("published") or values.get("updated")
         )
@@ -438,22 +468,51 @@ def parse_feed(
             continue
         if published and now - published > timedelta(hours=max_age_hours):
             continue
-        records.append(
-            {
-                "source": source_name,
-                "feed_url": source_url,
-                "title": title,
-                "summary": _clean_text(values.get("description") or values.get("summary")),
-                "url": url,
-                "published_at": _iso(published),
-            }
-        )
+        record = {
+            "source": source_name,
+            "feed_url": source_url,
+            "title": title,
+            "summary": _clean_text(values.get("description") or values.get("summary")),
+            "url": url,
+            "published_at": _iso(published),
+        }
+        if source_type != "publisher":
+            record["source_type"] = source_type
+            record["original_url"] = original_url
+        records.append(record)
     return records
 
 
 def _title_key(title: str) -> str:
     title = re.sub(r"\s+[-–—]\s+[^-–—]{2,80}$", "", title.strip())
     return re.sub(r"[^0-9a-z\u3400-\u9fff]+", "", title.casefold())[:180]
+
+
+def _url_key(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url.strip())
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    path = parsed.path.rstrip("/") or "/"
+    return f"{host}{path}?{parsed.query}" if parsed.query else f"{host}{path}"
+
+
+def dedupe_supplemental_candidates(
+    regular_items: list[dict[str, Any]],
+    supplemental_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    seen_urls = {_url_key(item.get("url", "")) for item in regular_items if item.get("url")}
+    seen_titles = {_title_key(item.get("title", "")) for item in regular_items if item.get("title")}
+    result: list[dict[str, Any]] = []
+    for item in supplemental_items:
+        url_key = _url_key(item.get("original_url") or item.get("url", ""))
+        title_key = _title_key(item.get("title", ""))
+        if url_key in seen_urls or title_key in seen_titles:
+            continue
+        if url_key:
+            seen_urls.add(url_key)
+        if title_key:
+            seen_titles.add(title_key)
+        result.append(item)
+    return result
 
 
 def interleave_news(groups: list[list[dict[str, Any]]], limit: int = 80) -> list[dict[str, Any]]:
@@ -484,12 +543,22 @@ def collect_feed_group(
     max_age_hours: int,
     per_source: int = 16,
     limit: int = 80,
+    source_type: str = "publisher",
+    prefer_external_link: bool = False,
 ) -> dict[str, Any]:
     groups: list[list[dict[str, Any]]] = []
     source_status: list[dict[str, Any]] = []
     for name, url in feeds:
         try:
-            parsed = parse_feed(fetch_text(url), name, url, now, max_age_hours)[:per_source]
+            parsed = parse_feed(
+                fetch_text(url),
+                name,
+                url,
+                now,
+                max_age_hours,
+                source_type=source_type,
+                prefer_external_link=prefer_external_link,
+            )[:per_source]
             parsed.sort(key=lambda row: row.get("published_at") or "", reverse=True)
             groups.append(parsed)
             source_status.append({"source": name, "ok": True, "items": len(parsed), "url": url})
@@ -537,6 +606,66 @@ def collect_news(now: datetime, errors: list[dict[str, str]]) -> dict[str, Any]:
         "sources": sources,
         "lanes": lanes,
         "items": interleave_news(lane_groups, limit=120),
+    }
+
+
+def buzzing_enabled() -> bool:
+    return os.environ.get("DAILY_BRIEF_BUZZING_ENABLED", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def collect_buzzing(
+    now: datetime,
+    errors: list[dict[str, str]],
+    *,
+    regular_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not buzzing_enabled():
+        return {
+            "sources": [],
+            "items": [],
+            "selection_limit": BUZZING_SELECTION_LIMIT,
+            "enabled": False,
+        }
+
+    groups: list[list[dict[str, Any]]] = []
+    sources: list[dict[str, Any]] = []
+    for source_name, feed_url, category in BUZZING_FEEDS:
+        try:
+            collection = collect_feed_group(
+                [(source_name, feed_url)],
+                now,
+                errors,
+                section="buzzing",
+                max_age_hours=BUZZING_MAX_AGE_HOURS,
+                per_source=BUZZING_PER_SOURCE,
+                limit=BUZZING_PER_SOURCE,
+                source_type="aggregator",
+                prefer_external_link=True,
+            )
+        except (FetchError, ValueError) as exc:
+            sources.append({"source": source_name, "ok": False, "items": 0, "url": feed_url, "category": category})
+            errors.append({"section": "buzzing", "source": source_name, "error": str(exc)[:120]})
+            continue
+        for source in collection["sources"]:
+            source["category"] = category
+            source["source_type"] = "aggregator"
+        for item in collection["items"]:
+            item["category"] = category
+            item["source_type"] = "aggregator"
+        sources.extend(collection["sources"])
+        groups.append(collection["items"])
+
+    candidates = interleave_news(groups, limit=BUZZING_LIMIT)
+    return {
+        "sources": sources,
+        "items": dedupe_supplemental_candidates(regular_items, candidates),
+        "selection_limit": BUZZING_SELECTION_LIMIT,
+        "enabled": True,
     }
 
 
@@ -758,6 +887,7 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
     local_date = now.astimezone(SHANGHAI).date().isoformat()
     errors: list[dict[str, str]] = []
     news = collect_news(now, errors)
+    buzzing = collect_buzzing(now, errors, regular_items=news["items"])
     fact_checks = collect_feed_group(
         FACT_CHECK_FEEDS,
         now,
@@ -795,6 +925,10 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
         "news_lanes_ok": successful_news_lanes,
         "news_lanes_total": len(NEWS_LANES),
         "news_items": len(news["items"]),
+        "buzzing_sources_ok": sum(
+            1 for source in buzzing["sources"] if source["ok"] and source["items"]
+        ),
+        "buzzing_items": len(buzzing["items"]),
         "fact_check_items": len(fact_checks["items"]),
         "think_tank_items": len(think_tanks["items"]),
         "war_items": len(war["items"]),
@@ -812,6 +946,7 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
         "local_date": local_date,
         "health": health,
         "news": news,
+        "buzzing": buzzing,
         "fact_checks": fact_checks,
         "think_tanks": think_tanks,
         "war": war,
@@ -857,6 +992,7 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"| 可用新闻源 | {health['news_sources_ok']} |",
         f"| 可用新闻类别 | {health.get('news_lanes_ok', 0)}/{health.get('news_lanes_total', 0)} |",
         f"| 新闻候选 | {health['news_items']} |",
+        f"| Buzzing 候选（非权威） | {health.get('buzzing_items', 0)} |",
         f"| 事实核查候选 | {health['fact_check_items']} |",
         f"| 权威智库候选 | {health['think_tank_items']} |",
         f"| 战争观察候选 | {health['war_items']} |",
@@ -871,6 +1007,28 @@ def render_markdown(bundle: dict[str, Any]) -> str:
             f"- [{_md(item.get('category_label'))}｜{_md(item['source'])}] "
             f"{_md(item.get('published_at'))} — "
             f"[{_md(item['title'])}]({item['url']}){summary}"
+        )
+    buzzing = bundle.get("buzzing", {"items": []})
+    lines.extend(
+        [
+            "",
+            "## Buzzing 补充发现（非权威，仅供模型选题）",
+            "",
+            "Buzzing 只提供发现线索；最终选用必须打开并引用原始发布者，且本节不是邮件栏目。",
+            "",
+        ]
+    )
+    for item in buzzing.get("items", []):
+        original_url = item.get("original_url")
+        original_note = (
+            f"原始来源：[{_md(original_url)}]({original_url})"
+            if original_url
+            else "原始来源：未提供；仅作发现线索，不可作为最终引用"
+        )
+        summary = f" — {_md(item['summary'])}" if item.get("summary") else ""
+        lines.append(
+            f"- [{_md(item.get('source'))}] {_md(item.get('published_at'))} — "
+            f"[{_md(item['title'])}]({item['url']}){summary}；{original_note}"
         )
     _append_feed_section(
         lines,
@@ -954,6 +1112,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "source_collection="
         f"news:{health['news_items']} lanes:{health['news_lanes_ok']}/{health['news_lanes_total']} "
+        f"buzzing:{health.get('buzzing_items', 0)} "
         f"fact_checks:{health['fact_check_items']} "
         f"think_tanks:{health['think_tank_items']} war:{health['war_items']} "
         f"markets:{health['market_items']}/{health['market_requested']}"

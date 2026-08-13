@@ -43,6 +43,146 @@ class SourceCollectorParserTests(unittest.TestCase):
         self.assertEqual(items[0]["url"], "https://example.com/recent")
         self.assertEqual(items[0]["source"], "Example")
 
+    def test_parse_aggregator_feed_prefers_external_original_link(self):
+        xml = """<?xml version="1.0"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <title>Useful product discovery</title>
+            <link rel="alternate" href="https://hn.buzzing.cc/p/useful" />
+            <link rel="related" href="https://news.ycombinator.com/item?id=123" />
+            <summary>Translated discovery summary</summary>
+            <published>2026-08-14T01:00:00Z</published>
+          </entry>
+        </feed>"""
+        items = collector.parse_feed(
+            xml,
+            "Buzzing HN",
+            "https://hn.buzzing.cc/feed.xml",
+            datetime(2026, 8, 14, 2, tzinfo=timezone.utc),
+            36,
+            source_type="aggregator",
+            prefer_external_link=True,
+        )
+        self.assertEqual(items[0]["url"], "https://news.ycombinator.com/item?id=123")
+        self.assertEqual(items[0]["original_url"], "https://news.ycombinator.com/item?id=123")
+        self.assertEqual(items[0]["feed_url"], "https://hn.buzzing.cc/feed.xml")
+        self.assertEqual(items[0]["source_type"], "aggregator")
+
+    def test_aggregator_without_external_link_has_no_original_url(self):
+        xml = """<rss><channel><item>
+          <title>Buzzing-only lead</title>
+          <link>https://news.buzzing.cc/p/only-lead</link>
+          <pubDate>Fri, 14 Aug 2026 01:00:00 GMT</pubDate>
+        </item></channel></rss>"""
+        items = collector.parse_feed(
+            xml,
+            "Buzzing News",
+            "https://news.buzzing.cc/feed.xml",
+            datetime(2026, 8, 14, 2, tzinfo=timezone.utc),
+            36,
+            source_type="aggregator",
+            prefer_external_link=True,
+        )
+        self.assertIsNone(items[0]["original_url"])
+
+    def test_dedupe_supplemental_candidates_against_regular_news(self):
+        regular = [{"title": "A new model launches", "url": "https://example.com/model"}]
+        supplemental = [
+            {
+                "title": "A new model launches - Original",
+                "url": "https://example.com/model",
+                "original_url": "https://example.com/model",
+            },
+            {
+                "title": "A separate lead",
+                "url": "https://example.org/lead",
+                "original_url": "https://example.org/lead",
+            },
+        ]
+        result = collector.dedupe_supplemental_candidates(regular, supplemental)
+        self.assertEqual([item["title"] for item in result], ["A separate lead"])
+
+    def test_buzzing_failure_is_non_critical(self):
+        errors: list[dict[str, str]] = []
+        with mock.patch.object(collector, "BUZZING_FEEDS", [("Buzzing HN", "https://hn.buzzing.cc/feed.xml", "technology_science")]), mock.patch.object(
+            collector,
+            "collect_feed_group",
+            side_effect=collector.FetchError("feed_down"),
+        ):
+            result = collector.collect_buzzing(
+                datetime(2026, 8, 14, tzinfo=timezone.utc),
+                errors,
+                regular_items=[],
+            )
+        self.assertEqual(result["items"], [])
+        self.assertTrue(any(error["section"] == "buzzing" for error in errors))
+
+    def test_collect_all_keeps_buzzing_outside_regular_health_gate(self):
+        regular_news = {
+            "sources": [{"ok": True, "items": 1}] * 8,
+            "lanes": [{"sources_ok": 1, "items": 40}] * 7,
+            "items": [{"title": f"Regular {index}", "url": f"https://example.com/{index}"} for index in range(40)],
+        }
+        empty_group = {"sources": [], "items": []}
+        market_items = [{"key": f"Market {index}"} for index in range(20)]
+        buzzing = {
+            "sources": [{"ok": True, "items": 1}],
+            "items": [{"title": "Optional lead", "url": "https://example.org/optional"}],
+            "selection_limit": 3,
+            "enabled": True,
+        }
+        with mock.patch.object(collector, "collect_news", return_value=regular_news), mock.patch.object(
+            collector, "collect_buzzing", return_value=buzzing
+        ), mock.patch.object(collector, "collect_feed_group", return_value=empty_group), mock.patch.object(
+            collector, "collect_markets", return_value={"items": market_items, "missing": [], "requested": 20}
+        ):
+            bundle = collector.collect_all(datetime(2026, 8, 14, tzinfo=timezone.utc))
+        self.assertFalse(bundle["health"]["critical"])
+        self.assertEqual(bundle["health"]["news_items"], 40)
+        self.assertEqual(bundle["health"]["buzzing_items"], 1)
+
+    def test_rendered_bundle_marks_buzzing_as_discovery_only(self):
+        bundle = {
+            "collected_at": "2026-08-14T01:00:00Z",
+            "local_date": "2026-08-14",
+            "health": {
+                "news_sources_ok": 0,
+                "news_lanes_ok": 0,
+                "news_lanes_total": 0,
+                "news_items": 0,
+                "buzzing_sources_ok": 1,
+                "buzzing_items": 1,
+                "fact_check_items": 0,
+                "think_tank_items": 0,
+                "war_items": 0,
+                "market_items": 0,
+                "market_requested": 0,
+            },
+            "news": {"sources": [], "items": []},
+            "buzzing": {
+                "sources": [],
+                "items": [{
+                    "source": "Buzzing HN",
+                    "source_type": "aggregator",
+                    "title": "Discovery",
+                    "summary": "Summary",
+                    "url": "https://example.com/original",
+                    "original_url": "https://example.com/original",
+                    "feed_url": "https://hn.buzzing.cc/feed.xml",
+                    "published_at": "2026-08-14T01:00:00Z",
+                }],
+            },
+            "fact_checks": {"sources": [], "items": []},
+            "think_tanks": {"sources": [], "items": []},
+            "war": {"sources": [], "items": []},
+            "markets": {"items": [], "missing": []},
+            "errors": [],
+        }
+        rendered = collector.render_markdown(bundle)
+        self.assertIn("非权威", rendered)
+        self.assertIn("Discovery", rendered)
+        self.assertIn("https://example.com/original", rendered)
+
     def test_runtime_source_sets_cover_fact_checks_think_tanks_and_war(self):
         fact_names = {name for name, _ in collector.FACT_CHECK_FEEDS}
         think_tank_names = {name for name, _ in collector.THINK_TANK_FEEDS}

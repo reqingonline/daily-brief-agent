@@ -7,7 +7,7 @@
 ```text
 Gmail 订阅预检
     -> 历史简报与“历史上的今天”上下文
-    -> 多类别新闻 / 事实核查 / 智库 / 战争 / 行情采集
+    -> 多类别新闻 / 可选 Buzzing 发现 / 事实核查 / 智库 / 战争 / 行情采集
     -> Codex 联网检索与完整 HTML 生成
     -> 本地结构、语言、来源多样性与直链校验
     -> 最多两次错误驱动的完整重写
@@ -19,6 +19,7 @@ Gmail 订阅预检
 ## 特性
 
 - 11 个新闻类别交错采集，避免单一媒体或单一主题占满头部；
+- Buzzing 仅作为最多 3 条的可选发现候选池，抓取失败不影响主流程，也不产生独立邮件栏目；
 - 独立的事实核查、权威智库、战争观察和市场行情候选池；
 - 参考最近简报，减少跨期重复并保持栏目连续性；
 - 对全球事件执行来源域名多样性、集中度和直接链接校验；
@@ -53,6 +54,9 @@ chmod 600 .env config/codex-runtime.env state/daily-brief-subscribers.json
 date +%s > state/subscription-preflight.ok
 DAILY_BRIEF_DRY_RUN=1 ./scripts/run-daily-brief.sh
 ```
+
+Buzzing 候选池默认开启，但它不是必需来源；设置
+`DAILY_BRIEF_BUZZING_ENABLED=0` 只会关闭这组补充发现，不会关闭常规新闻、事实核查或质量校验。即使开启，模型也可以在本期完全不选用 Buzzing 内容。
 
 真实部署、Gmail OAuth、systemd 和回滚步骤见 [部署文档](docs/deployment.md)。提示词分层、资料信任边界、质量规则和自动修复机制见 [模型设计](docs/model-design.md)。
 
