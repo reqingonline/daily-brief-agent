@@ -85,6 +85,59 @@ class SourceCollectorParserTests(unittest.TestCase):
         )
         self.assertIsNone(items[0]["original_url"])
 
+    def test_aggregator_discovery_links_are_not_treated_as_original_sources(self):
+        xml = """<rss><channel><item>
+          <title>Aggregated report</title>
+          <link>https://news.google.com/rss/articles/example</link>
+          <pubDate>Fri, 14 Aug 2026 01:00:00 GMT</pubDate>
+        </item></channel></rss>"""
+        items = collector.parse_feed(
+            xml,
+            "Buzzing News",
+            "https://news.buzzing.cc/feed.xml",
+            datetime(2026, 8, 14, 2, tzinfo=timezone.utc),
+            36,
+            source_type="aggregator",
+            prefer_external_link=True,
+        )
+        self.assertIsNone(items[0]["original_url"])
+
+    def test_collect_buzzing_excludes_discovery_only_items_from_eligible_pool(self):
+        feed_items = [
+            {
+                "source": "Buzzing News",
+                "title": "Only a translated lead",
+                "summary": "summary",
+                "url": "https://news.buzzing.cc/lead",
+                "original_url": None,
+                "published_at": "2026-08-14T01:00:00Z",
+            },
+            {
+                "source": "Buzzing HN",
+                "title": "Original lead",
+                "summary": "summary",
+                "url": "https://example.org/original",
+                "original_url": "https://example.org/original",
+                "published_at": "2026-08-14T01:00:00Z",
+            },
+        ]
+        with mock.patch.object(
+            collector,
+            "BUZZING_FEEDS",
+            [("Buzzing News", "https://news.buzzing.cc/feed.xml", "world_affairs")],
+        ), mock.patch.object(
+            collector,
+            "collect_feed_group",
+            return_value={"sources": [{"source": "Buzzing News", "ok": True, "items": 2, "url": "https://news.buzzing.cc/feed.xml"}], "items": feed_items},
+        ):
+            result = collector.collect_buzzing(
+                datetime(2026, 8, 14, tzinfo=timezone.utc),
+                [],
+                regular_items=[],
+            )
+        self.assertEqual([item["title"] for item in result["items"]], ["Original lead"])
+        self.assertEqual([item["title"] for item in result["discovery_only"]], ["Only a translated lead"])
+
     def test_dedupe_supplemental_candidates_against_regular_news(self):
         regular = [{"title": "A new model launches", "url": "https://example.com/model"}]
         supplemental = [

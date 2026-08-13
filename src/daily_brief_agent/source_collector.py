@@ -341,6 +341,13 @@ BUZZING_MAX_AGE_HOURS = 48
 BUZZING_PER_SOURCE = 6
 BUZZING_LIMIT = 12
 BUZZING_SELECTION_LIMIT = 3
+DISCOVERY_ONLY_HOSTS = {
+    "google.com",
+    "news.google.com",
+    "twitter.com",
+    "x.com",
+    "t.co",
+}
 
 
 class FetchError(RuntimeError):
@@ -387,6 +394,11 @@ def _is_http_url(value: str) -> bool:
 def _is_buzzing_url(value: str) -> bool:
     hostname = (urllib.parse.urlsplit(value).hostname or "").lower().rstrip(".")
     return hostname == "buzzing.cc" or hostname.endswith(".buzzing.cc")
+
+
+def _is_discovery_only_url(value: str) -> bool:
+    hostname = (urllib.parse.urlsplit(value).hostname or "").lower().rstrip(".")
+    return _is_buzzing_url(value) or hostname in DISCOVERY_ONLY_HOSTS
 
 
 def fetch_text(
@@ -459,7 +471,7 @@ def parse_feed(
         links = [link for link in links if _is_http_url(link)]
         original_url = None
         if prefer_external_link:
-            original_url = next((link for link in links if not _is_buzzing_url(link)), None)
+            original_url = next((link for link in links if not _is_discovery_only_url(link)), None)
         url = original_url or (links[0] if links else "")
         published = _parse_datetime(
             values.get("pubdate") or values.get("published") or values.get("updated")
@@ -628,6 +640,7 @@ def collect_buzzing(
         return {
             "sources": [],
             "items": [],
+            "discovery_only": [],
             "selection_limit": BUZZING_SELECTION_LIMIT,
             "enabled": False,
         }
@@ -661,9 +674,11 @@ def collect_buzzing(
         groups.append(collection["items"])
 
     candidates = interleave_news(groups, limit=BUZZING_LIMIT)
+    eligible = [item for item in candidates if item.get("original_url")]
     return {
         "sources": sources,
-        "items": dedupe_supplemental_candidates(regular_items, candidates),
+        "items": dedupe_supplemental_candidates(regular_items, eligible),
+        "discovery_only": [item for item in candidates if not item.get("original_url")],
         "selection_limit": BUZZING_SELECTION_LIMIT,
         "enabled": True,
     }
@@ -1029,6 +1044,12 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         lines.append(
             f"- [{_md(item.get('source'))}] {_md(item.get('published_at'))} — "
             f"[{_md(item['title'])}]({item['url']}){summary}；{original_note}"
+        )
+    for item in buzzing.get("discovery_only", []):
+        summary = f" — {_md(item['summary'])}" if item.get("summary") else ""
+        lines.append(
+            f"- [仅发现线索｜{_md(item.get('source'))}] {_md(item.get('published_at'))} — "
+            f"{_md(item['title'])}{summary}；原始来源未能确认，不可作为最终引用"
         )
     _append_feed_section(
         lines,
