@@ -146,14 +146,21 @@ def _source_quality_errors(section_name: str, section: dict[str, Any]) -> list[s
 
 def validate(content: str, local_date: date) -> list[str]:
     errors: list[str] = []
-    if not re.search(r"(?m)^Subject:\s*每日大事与市场简报\s*-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+中国时间\s*$", content):
+    subject_match = re.search(
+        r"(?m)^Subject:\s*每日大事与市场简报\s*-\s*\d{4}-\d{2}-\d{2}\s+(?P<hour>\d{2}):\d{2}\s+中国时间\s*$",
+        content,
+    )
+    if not subject_match:
         errors.append("subject_format_invalid")
     if not re.search(r"<html\b", content, flags=re.IGNORECASE) or not re.search(r"</html>\s*$", content, flags=re.IGNORECASE):
         errors.append("html_document_incomplete")
 
     parser = StructureParser()
     parser.feed(content)
-    required = ("本期 5 个要点", "全球重大事件", "事实核查", "国际关系观察", "权威智库报告", "国际战争观察", "历史上的今天")
+    history_suppressed = subject_match is not None and subject_match.group("hour") == "23"
+    required = ("本期 5 个要点", "全球重大事件", "国际关系观察", "权威智库报告", "国际战争观察")
+    if not history_suppressed:
+        required += ("历史上的今天",)
     for name in required:
         if _find_section(parser.sections, name)[1] is None:
             errors.append(f"required_section_missing:{name}")
@@ -164,9 +171,13 @@ def validate(content: str, local_date: date) -> list[str]:
         errors.append(f"global_event_count:{global_count}_not_in_1_15")
 
     history_index, history_section = _find_section(parser.sections, "历史上的今天")
-    history_count = max(history_section["h3_count"], history_section["li_count"]) if history_section else 0
-    if not 3 <= history_count <= 5:
-        errors.append(f"history_event_count:{history_count}_not_in_3_5")
+    if history_suppressed:
+        if history_section is not None:
+            errors.append("history_section_forbidden_at_23")
+    else:
+        history_count = max(history_section["h3_count"], history_section["li_count"]) if history_section else 0
+        if not 3 <= history_count <= 5:
+            errors.append(f"history_event_count:{history_count}_not_in_3_5")
     method_index, _ = _find_section(parser.sections, "数据与方法说明")
     if method_index >= 0 and history_index >= method_index:
         errors.append("history_not_before_method_footer")

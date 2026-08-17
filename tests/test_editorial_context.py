@@ -22,6 +22,14 @@ SAMPLE_MAIL = """Subject: 每日大事与市场简报 - 2026-08-03 23:00 中国�
 </body></html>
 """
 
+HISTORY_MAIL = """Subject: 每日大事与市场简报 - 2026-08-03 11:00 中国时间
+<html><body>
+<h2>二、全球重大事件</h2><h3>1. 一项较早的全球事件</h3>
+<h2>九、历史上的今天</h2><p>上一期历史事件已使用，不能在下一期重复。</p>
+<a href="https://example.net/history">历史来源</a>
+</body></html>
+"""
+
 
 class EditorialContextTests(unittest.TestCase):
     def test_parse_brief_extracts_subject_sections_titles_and_links(self):
@@ -122,6 +130,21 @@ class EditorialContextTests(unittest.TestCase):
         )
         self.assertIn("旧版智库摘要", rendered)
         self.assertIn("https://example.org/legacy", rendered)
+
+    def test_render_context_exposes_latest_full_mail_and_recent_history(self):
+        latest = context.parse_brief(SAMPLE_MAIL, "sent-message-20260804-230003.md")
+        older = context.parse_brief(HISTORY_MAIL, "sent-message-20260804-110003.md")
+        rendered = context.render_context(
+            context.edition_context(datetime(2026, 8, 4, 23, 5, tzinfo=ZoneInfo("Asia/Shanghai"))),
+            [latest, older],
+            [],
+            [],
+        )
+        self.assertIn("上一封完整邮报", rendered)
+        self.assertIn("#### 全球重大事件", rendered)
+        self.assertIn("乌干达更新疫情通报", rendered)
+        self.assertIn("历史事件已使用", rendered)
+        self.assertIn("https://example.net/history", rendered)
 
 
 if __name__ == "__main__":

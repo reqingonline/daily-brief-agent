@@ -6,23 +6,34 @@ from datetime import date
 from daily_brief_agent import validate_brief as validator
 
 
-def build_mail(*, global_count: int = 8, history_count: int = 3, market: bool = True, extra_link: str = "") -> str:
+def build_mail(
+    *,
+    global_count: int = 8,
+    history_count: int = 3,
+    market: bool = True,
+    extra_link: str = "",
+    hour: int = 11,
+    include_facts: bool = True,
+    include_history: bool = True,
+) -> str:
     global_items = "".join(
         f'<h3>{i}.【领域】事件 {i}<a href="https://source{i}.example.com/item/{i}">来源</a></h3>'
         for i in range(1, global_count + 1)
     )
     history_items = "".join(f"<h3>{1900 + i}年：历史事件 {i}</h3>" for i in range(history_count))
     market_html = "<h2>七、市场总览</h2><h2>八、股票与指数</h2>" if market else ""
-    return f"""Subject: 每日大事与市场简报 - 2026-08-04 11:00 中国时间
+    facts_html = "<h2>三、事实核查</h2>" if include_facts else ""
+    history_html = f"<h2>九、历史上的今天</h2>{history_items}" if include_history else ""
+    return f"""Subject: 每日大事与市场简报 - 2026-08-04 {hour:02d}:00 中国时间
 <html><body>
 <h2>一、本期 5 个要点</h2>
 <h2>二、全球重大事件</h2>{global_items}
-<h2>三、事实核查</h2>
+{facts_html}
 <h2>四、国际关系观察</h2>
 <h2>五、权威智库报告</h2>
 <h2>六、国际战争观察</h2>
 {market_html}
-<h2>九、历史上的今天</h2>{history_items}
+{history_html}
 <p><a href="https://example.com/source">来源</a>{extra_link}</p>
 <h2>数据与方法说明</h2>
 </body></html>"""
@@ -52,6 +63,19 @@ class ValidateBriefTests(unittest.TestCase):
     def test_history_requires_three_to_five_entries(self):
         errors = validator.validate(build_mail(history_count=2), date(2026, 8, 4))
         self.assertIn("history_event_count:2_not_in_3_5", errors)
+
+    def test_fact_check_section_is_optional(self):
+        self.assertEqual(validator.validate(build_mail(include_facts=False), date(2026, 8, 4)), [])
+
+    def test_evening_edition_omits_history(self):
+        self.assertEqual(
+            validator.validate(build_mail(hour=23, include_history=False), date(2026, 8, 4)),
+            [],
+        )
+
+    def test_evening_edition_rejects_history(self):
+        errors = validator.validate(build_mail(hour=23), date(2026, 8, 4))
+        self.assertIn("history_section_forbidden_at_23", errors)
 
     def test_history_accepts_semantic_list_items(self):
         self.assertEqual(validator.validate(build_list_history_mail(), date(2026, 8, 4)), [])

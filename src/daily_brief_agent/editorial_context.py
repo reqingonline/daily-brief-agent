@@ -234,16 +234,30 @@ def render_context(
         "## 最近已发送内容",
         "",
         "以下内容用于避免复读，不代表本期仍应刊登。链接或标题命中去重窗口时默认排除。",
+        "每次生成前必须完整回顾下一段标记为“上一封完整邮报”的可见正文；其余已发送内容用于补充时间窗口去重。",
     ]
     if not briefs:
         lines.append("- 尚无可用的已发送邮件记录。")
     for brief_index, brief in enumerate(briefs):
+        lines.extend(["", f"### {brief['subject']}"])
+        if brief_index == 0:
+            lines.append("- 上一期完整邮报（硬去重基线；以下为解析后的全部可见正文，不得照抄或改写后重复刊登）：")
+            for section in brief["sections"]:
+                lines.append(f"#### {section['name']}")
+                for item in section["items"]:
+                    links = " ".join(item["links"][:5]) or "（无链接）"
+                    lines.append(f"- 条目：{item['title']} | 来源：{links}")
+                if section.get("text"):
+                    lines.append(f"- 正文：{section['text']}")
+                if section.get("links"):
+                    lines.append(f"- 本板块链接：{' '.join(section['links'][:20])}")
+            continue
+
         relevant = (
-            ("全球重大事件", "事实核查", "权威智库报告", "国际战争观察")
+            ("全球重大事件", "事实核查", "权威智库报告", "国际战争观察", "历史上的今天")
             if brief_index < 6
             else ("事实核查", "权威智库报告")
         )
-        lines.extend(["", f"### {brief['subject']}"])
         item_count = 0
         for section in brief["sections"]:
             if not any(name in section["name"] for name in relevant):
