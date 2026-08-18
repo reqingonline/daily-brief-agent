@@ -17,6 +17,7 @@ COLLECTOR_MODULE="${BRIEF_COLLECTOR_MODULE:-daily_brief_agent.source_collector}"
 EDITORIAL_MODULE="${BRIEF_EDITORIAL_MODULE:-daily_brief_agent.editorial_context}"
 VALIDATOR_MODULE="${BRIEF_VALIDATOR_MODULE:-daily_brief_agent.validate_brief}"
 SMTP_MODULE="${BRIEF_SMTP_MODULE:-daily_brief_agent.smtp_send}"
+METADATA_MODULE="${BRIEF_METADATA_MODULE:-daily_brief_agent.generation_metadata}"
 TOTAL_START="$(date +%s)"
 
 export PYTHONPATH="$BASE_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -67,7 +68,10 @@ editorial_markdown="$WORKSPACE/editorial-context.md"
 combined_prompt="$(mktemp "$WORKSPACE/.brief-prompt-$timestamp.XXXXXX.txt")"
 repair_prompt="$(mktemp "$WORKSPACE/.brief-repair-$timestamp.XXXXXX.txt")"
 last_output="$(mktemp "$WORKSPACE/.last-message-$timestamp.XXXXXX.md")"
-trap 'rm -f "$combined_prompt" "$repair_prompt" "$last_output"' EXIT
+usage_events="$WORKSPACE/.codex-events-$timestamp.jsonl"
+metadata_output="$(mktemp "$WORKSPACE/.metadata-message-$timestamp.XXXXXX.md")"
+: > "$usage_events"
+trap 'rm -f "$combined_prompt" "$repair_prompt" "$last_output" "$metadata_output" "$usage_events"' EXIT
 
 run_codex() {
   local prompt_file="$1"
@@ -86,9 +90,11 @@ run_codex() {
     --model "$CODEX_MODEL" \
     --config "model_reasoning_effort=\"$CODEX_REASONING_EFFORT\"" \
     --output-last-message "$last_output" \
-    - < "$prompt_file" >/dev/null 2>&1
+    --json \
+    - < "$prompt_file" >> "$usage_events" 2>/dev/null
   status=$?
   set -e
+  printf '\n' >> "$usage_events"
   elapsed=$(( $(date +%s) - started ))
   echo "model_generation_seconds=$elapsed attempt=$attempt"
   return "$status"
@@ -200,6 +206,14 @@ while true; do
     exit 1
   fi
 done
+
+if ! "$PYTHON" -m "$METADATA_MODULE" "$last_output" "$metadata_output" \
+  --model "$CODEX_MODEL" --events "$usage_events"; then
+  install -m 600 "$last_output" "$LOG_DIR/rejected-message-$timestamp-metadata-failed.md"
+  echo "daily_brief_error=generation_metadata_failed" >&2
+  exit 1
+fi
+mv -- "$metadata_output" "$last_output"
 
 sender_args=("$last_output" "$STATE_FILE")
 if [[ "${DAILY_BRIEF_DRY_RUN:-0}" == "1" ]]; then
