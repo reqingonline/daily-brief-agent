@@ -1,6 +1,6 @@
 # Daily Brief Agent
 
-Daily Brief Agent is a production-oriented pipeline for creating Chinese global-news and market email briefings. It combines broad source collection, history-aware editorial context, Codex generation with web search, strict local validation, bounded error-informed regeneration, safe Gmail subscription commands, and per-recipient SMTP delivery.
+Daily Brief Agent is a production-oriented pipeline for creating Chinese global-news and market email briefings. It combines broad source collection, history-aware editorial context, Codex generation with web search, strict local validation, bounded error-informed regeneration, safe Gmail subscription commands, per-recipient SMTP delivery, and a subtle model/total-token annotation injected after validation.
 
 The public repository contains no production credentials, subscribers, reports, logs, or host details. Start with the [Chinese README](README.md) for installation and operations.
 
