@@ -23,6 +23,30 @@ _ENGLISH_LEAK_PATTERNS = (
     re.compile(r"\btop leadership\b", re.IGNORECASE),
     re.compile(r"\bchokepoint\b", re.IGNORECASE),
 )
+_FUTURES_MARKET_KEYS = ("ZC=F", "ZW=F", "ZS=F", "GC=F", "SI=F", "HG=F")
+_OFFICIAL_EARNINGS_DOMAINS = {
+    "sec.gov",
+    "apple.com",
+    "amd.com",
+    "amazon.com",
+    "about.fb.com",
+    "abc.xyz",
+    "google.com",
+    "hkexnews.hk",
+    "microsoft.com",
+    "nvidia.com",
+    "tesla.com",
+    "zhipuai.cn",
+    "sse.com.cn",
+    "szse.cn",
+}
+_DISCOVERY_EARNINGS_HOSTS = {
+    "finance.yahoo.com",
+    "news.google.com",
+    "nasdaq.com",
+    "marketwatch.com",
+    "seekingalpha.com",
+}
 
 
 def _clean(value: str) -> str:
@@ -144,6 +168,35 @@ def _source_quality_errors(section_name: str, section: dict[str, Any]) -> list[s
     return errors
 
 
+def _earnings_anchor_links(content: str) -> list[tuple[str, str]]:
+    links: list[tuple[str, str]] = []
+    for match in re.finditer(r"<a\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", content, re.I | re.S):
+        label = _clean(re.sub(r"<[^>]+>", " ", match.group(2)))
+        if "财报" in label or "官方公告" in label:
+            links.append((match.group(1), label))
+    return links
+
+
+def _earnings_link_errors(content: str, local_date: date) -> list[str]:
+    errors: list[str] = []
+    for link, _label in _earnings_anchor_links(content):
+        parsed = urlparse(link)
+        host = (parsed.hostname or "").casefold().removeprefix("www.")
+        if host in _DISCOVERY_EARNINGS_HOSTS or host.endswith(".google.com"):
+            errors.append("earnings_discovery_link_present")
+            continue
+        if host not in _OFFICIAL_EARNINGS_DOMAINS and not any(
+            host.endswith(f".{domain}") for domain in _OFFICIAL_EARNINGS_DOMAINS
+        ):
+            errors.append(f"earnings_official_domain_unapproved:{host or 'missing'}")
+        if re.search(r"/(?:search|search-results?)(?:/|\\?|$)", parsed.path + (f"?{parsed.query}" if parsed.query else ""), re.I):
+            errors.append("earnings_search_page_present")
+    dates = re.findall(r"(?:今日财报|官方公告)[：:]\s*(\d{4}-\d{2}-\d{2})", content)
+    if any(value != local_date.isoformat() for value in dates):
+        errors.append("earnings_link_date_not_today")
+    return sorted(set(errors))
+
+
 def validate(content: str, local_date: date) -> list[str]:
     errors: list[str] = []
     if not re.search(r"(?m)^Subject:\s*每日大事与市场简报\s*-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+中国时间\s*$", content):
@@ -171,10 +224,17 @@ def validate(content: str, local_date: date) -> list[str]:
     if method_index >= 0 and history_index >= method_index:
         errors.append("history_not_before_method_footer")
 
+    visible_text = "".join(parser.visible_text)
     market_present = _find_section(parser.sections, "市场总览")[1] is not None
+    futures_present = _find_section(parser.sections, "国际期货与大宗商品")[1] is not None
     stocks_present = _find_section(parser.sections, "股票与指数")[1] is not None
-    if local_date.weekday() < 5 and not (market_present and stocks_present):
+    if local_date.weekday() < 5 and not (market_present and futures_present and stocks_present):
         errors.append("weekday_market_sections_missing")
+    if local_date.weekday() < 5:
+        if not re.search(r"下一次财报", visible_text):
+            errors.append("earnings_fields_missing")
+        if not futures_present or not all(key in visible_text for key in _FUTURES_MARKET_KEYS):
+            errors.append("futures_items_missing")
 
     if any("news.google.com" in link.casefold() for link in parser.links):
         errors.append("google_news_link_present")
@@ -182,7 +242,6 @@ def validate(content: str, local_date: date) -> list[str]:
         errors.append("cancelled_social_section_present")
     if re.search(r"作者\s*[：:]\s*[^<\n]{0,30}(?:编辑与研究团队|研究团队|作者不详|未知作者)", content):
         errors.append("think_tank_author_placeholder")
-    visible_text = "".join(parser.visible_text)
     if any(pattern.search(visible_text) for pattern in _ENGLISH_LEAK_PATTERNS):
         errors.append("english_leak_present")
     if global_section:
@@ -190,6 +249,7 @@ def validate(content: str, local_date: date) -> list[str]:
     _, war_section = _find_section(parser.sections, "国际战争观察")
     if war_section:
         errors.extend(_source_quality_errors("国际战争观察", war_section))
+    errors.extend(_earnings_link_errors(content, local_date))
     return errors
 
 

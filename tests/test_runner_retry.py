@@ -117,6 +117,8 @@ cat > "${FAKE_PROMPT_PREFIX:?}-$count.txt"
   printf '<html><body><h2>全球重大事件</h2><p>完整测试内容</p>'
   printf '<h2>事实核查</h2><p>测试</p><h2>国际关系观察</h2><p>测试</p>'
   printf '<h2>权威智库报告</h2><p>测试</p><h2>国际战争观察</h2><p>测试</p>'
+  printf '<h2>国际期货与大宗商品</h2><p>ZC=F ZW=F ZS=F GC=F SI=F HG=F</p>'
+  printf '<h2>股票与指数</h2><p>下一次财报：暂无可靠日期</p>'
   printf '<h2>历史上的今天</h2><p>测试</p>'
   if (( count == 1 )); then printf 'CONCENTRATED_SOURCE'; fi
   for _ in {1..800}; do printf '补充'; done

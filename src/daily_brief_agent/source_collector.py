@@ -23,7 +23,9 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Mapping
+
+from .earnings_calendar import collect_earnings as _collect_earnings
 
 
 USER_AGENT = "Mozilla/5.0 (compatible; DailyBriefSourceCollector/1.0; +local-automation)"
@@ -314,21 +316,33 @@ WAR_FEEDS = [
 ]
 
 MARKET_SYMBOLS = [
-    {"key": "NASDAQ Composite", "cnbc": ".IXIC", "yahoo": "^IXIC"},
-    {"key": "S&P 500", "cnbc": ".SPX", "yahoo": "^GSPC"},
-    {"key": "Dow Jones", "cnbc": ".DJI", "yahoo": "^DJI"},
-    {"key": "Shanghai Composite", "yahoo": "000001.SS"},
-    {"key": "Shenzhen Component", "yahoo": "399001.SZ"},
-    {"key": "AAPL", "cnbc": "AAPL", "yahoo": "AAPL"},
-    {"key": "NVDA", "cnbc": "NVDA", "yahoo": "NVDA"},
-    {"key": "AMD", "cnbc": "AMD", "yahoo": "AMD"},
-    {"key": "MSFT", "cnbc": "MSFT", "yahoo": "MSFT"},
-    {"key": "GOOG", "cnbc": "GOOG", "yahoo": "GOOG"},
-    {"key": "AMZN", "cnbc": "AMZN", "yahoo": "AMZN"},
-    {"key": "META", "cnbc": "META", "yahoo": "META"},
-    {"key": "TSLA", "cnbc": "TSLA", "yahoo": "TSLA"},
-    {"key": "JPM", "cnbc": "JPM", "yahoo": "JPM"},
-    {"key": "BABA", "cnbc": "BABA", "yahoo": "BABA"},
+    {"key": "NASDAQ Composite", "cnbc": ".IXIC", "yahoo": "^IXIC", "kind": "index"},
+    {"key": "S&P 500", "cnbc": ".SPX", "yahoo": "^GSPC", "kind": "index"},
+    {"key": "Dow Jones", "cnbc": ".DJI", "yahoo": "^DJI", "kind": "index"},
+    {"key": "Shanghai Composite", "yahoo": "000001.SS", "kind": "index"},
+    {"key": "Shenzhen Component", "yahoo": "399001.SZ", "kind": "index"},
+    {"key": "AAPL", "cnbc": "AAPL", "yahoo": "AAPL", "kind": "stock", "display_name": "苹果", "market": "US", "sec_cik": "0000320193", "official_domains": ("apple.com", "sec.gov")},
+    {"key": "NVDA", "cnbc": "NVDA", "yahoo": "NVDA", "kind": "stock", "display_name": "英伟达", "market": "US", "sec_cik": "0001045810", "official_domains": ("nvidia.com", "sec.gov")},
+    {"key": "AMD", "cnbc": "AMD", "yahoo": "AMD", "kind": "stock", "display_name": "超威半导体", "market": "US", "sec_cik": "0000002488", "official_domains": ("amd.com", "sec.gov")},
+    {"key": "MSFT", "cnbc": "MSFT", "yahoo": "MSFT", "kind": "stock", "display_name": "微软", "market": "US", "sec_cik": "0000789019", "official_domains": ("microsoft.com", "sec.gov")},
+    {"key": "GOOG", "cnbc": "GOOG", "yahoo": "GOOG", "kind": "stock", "display_name": "谷歌", "market": "US", "sec_cik": "0001652044", "official_domains": ("abc.xyz", "google.com", "sec.gov")},
+    {"key": "AMZN", "cnbc": "AMZN", "yahoo": "AMZN", "kind": "stock", "display_name": "亚马逊", "market": "US", "sec_cik": "0001018724", "official_domains": ("amazon.com", "sec.gov")},
+    {"key": "META", "cnbc": "META", "yahoo": "META", "kind": "stock", "display_name": "Meta", "market": "US", "sec_cik": "0001326801", "official_domains": ("about.fb.com", "sec.gov")},
+    {"key": "TSLA", "cnbc": "TSLA", "yahoo": "TSLA", "kind": "stock", "display_name": "特斯拉", "market": "US", "sec_cik": "0001318605", "official_domains": ("tesla.com", "sec.gov")},
+    {"key": "JPM", "cnbc": "JPM", "yahoo": "JPM", "kind": "stock", "display_name": "摩根大通", "market": "US", "sec_cik": "0000019617", "official_domains": ("jpmorganchase.com", "sec.gov")},
+    {"key": "BABA", "cnbc": "BABA", "yahoo": "BABA", "kind": "stock", "display_name": "阿里巴巴", "market": "US", "sec_cik": "0001577552", "official_domains": ("alibabagroup.com", "sec.gov")},
+    {"key": "02513.HK", "yahoo": "2513.HK", "kind": "stock", "display_name": "智谱（Z.AI）", "market": "HK", "official_domains": ("hkexnews.hk", "zhipuai.cn"), "identity_source_url": "https://www.hkexnews.hk/listedco/listconews/sehk/2026/0714/2026071400984.pdf"},
+]
+
+STOCK_WATCHLIST = [item for item in MARKET_SYMBOLS if item.get("kind") == "stock"]
+
+FUTURES_SYMBOLS = [
+    {"key": "玉米期货", "display_name": "玉米", "group": "国际粮食", "yahoo": "ZC=F", "unit": "美元/蒲式耳", "kind": "futures"},
+    {"key": "小麦期货", "display_name": "小麦", "group": "国际粮食", "yahoo": "ZW=F", "unit": "美分/蒲式耳", "kind": "futures"},
+    {"key": "大豆期货", "display_name": "大豆", "group": "国际粮食", "yahoo": "ZS=F", "unit": "美分/蒲式耳", "kind": "futures"},
+    {"key": "黄金期货", "display_name": "黄金", "group": "贵金属", "yahoo": "GC=F", "unit": "美元/金衡盎司", "kind": "futures"},
+    {"key": "白银期货", "display_name": "白银", "group": "贵金属", "yahoo": "SI=F", "unit": "美元/金衡盎司", "kind": "futures"},
+    {"key": "铜期货", "display_name": "铜", "group": "工业金属", "yahoo": "HG=F", "unit": "美元/磅", "kind": "futures"},
 ]
 
 BUZZING_FEEDS = [
@@ -722,7 +736,11 @@ def parse_cnbc_quotes(payload: dict[str, Any], symbol_to_key: dict[str, str]) ->
     return result
 
 
-def parse_yahoo_quote(payload: dict[str, Any], key: str) -> dict[str, Any]:
+def parse_yahoo_quote(
+    payload: dict[str, Any],
+    key: str,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     chart = payload.get("chart")
     if not isinstance(chart, dict) or chart.get("error"):
         raise ValueError("yahoo_chart_error")
@@ -737,7 +755,7 @@ def parse_yahoo_quote(payload: dict[str, Any], key: str) -> dict[str, Any]:
     change = price - float(previous) if isinstance(previous, (int, float)) else None
     change_pct = change / float(previous) * 100 if change is not None and previous else None
     market_time = meta.get("regularMarketTime")
-    return {
+    result = {
         "key": key,
         "provider_symbol": meta.get("symbol") or key,
         "name": meta.get("longName") or meta.get("shortName") or key,
@@ -750,6 +768,16 @@ def parse_yahoo_quote(payload: dict[str, Any], key: str) -> dict[str, Any]:
         "provider": "Yahoo Finance chart",
         "extended": None,
     }
+    if metadata:
+        result.update(
+            {
+                "display_name": metadata.get("display_name") or result["name"],
+                "group": metadata.get("group"),
+                "unit": metadata.get("unit"),
+                "kind": metadata.get("kind", "stock"),
+            }
+        )
+    return result
 
 
 def parse_nasdaq_quote(payload: dict[str, Any], key: str) -> dict[str, Any]:
@@ -819,8 +847,10 @@ def parse_tencent_quotes(
 
 
 def collect_markets(errors: list[dict[str, str]]) -> dict[str, Any]:
+    definitions = [*MARKET_SYMBOLS, *FUTURES_SYMBOLS]
+    metadata_by_key = {item["key"]: item for item in definitions}
     by_key: dict[str, dict[str, Any]] = {}
-    cnbc_symbols = [item["cnbc"] for item in MARKET_SYMBOLS]
+    cnbc_symbols = [item["cnbc"] for item in definitions if item.get("cnbc")]
     cnbc_url = (
         "https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?"
         + urllib.parse.urlencode(
@@ -835,32 +865,51 @@ def collect_markets(errors: list[dict[str, str]]) -> dict[str, Any]:
             }
         )
     )
-    try:
-        symbol_to_key = {item["cnbc"]: item["key"] for item in MARKET_SYMBOLS}
-        by_key.update(parse_cnbc_quotes(fetch_json(cnbc_url), symbol_to_key))
-        for row in by_key.values():
-            row["source_url"] = cnbc_url
-    except (FetchError, ValueError) as exc:
-        errors.append({"section": "markets", "source": "CNBC", "error": str(exc)[:120]})
+    if cnbc_symbols:
+        try:
+            symbol_to_key = {item["cnbc"]: item["key"] for item in definitions if item.get("cnbc")}
+            by_key.update(parse_cnbc_quotes(fetch_json(cnbc_url), symbol_to_key))
+            for key, row in by_key.items():
+                row["source_url"] = cnbc_url
+                row.update(
+                    {
+                        "display_name": metadata_by_key[key].get("display_name") or row.get("name") or key,
+                        "group": metadata_by_key[key].get("group"),
+                        "unit": metadata_by_key[key].get("unit"),
+                        "kind": metadata_by_key[key].get("kind", "stock"),
+                    }
+                )
+        except (FetchError, ValueError) as exc:
+            errors.append({"section": "markets", "source": "CNBC", "error": str(exc)[:120]})
 
-    for item in MARKET_SYMBOLS:
+    for item in definitions:
         key = item["key"]
         if key in by_key:
+            continue
+        if not item.get("yahoo"):
             continue
         yahoo_symbol = urllib.parse.quote(item["yahoo"], safe="")
         yahoo_url = f"https://query2.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?range=5d&interval=1d"
         try:
-            row = parse_yahoo_quote(fetch_json(yahoo_url), key)
+            row = parse_yahoo_quote(fetch_json(yahoo_url), key, item)
             row["source_url"] = yahoo_url
             by_key[key] = row
             continue
         except (FetchError, ValueError) as exc:
             errors.append({"section": "markets", "source": f"Yahoo:{key}", "error": str(exc)[:120]})
-        if re.fullmatch(r"[A-Z]{1,5}", key):
+        if item.get("kind") == "stock" and re.fullmatch(r"[A-Z]{1,5}", key):
             nasdaq_url = f"https://api.nasdaq.com/api/quote/{key}/info?assetclass=stocks"
             try:
                 row = parse_nasdaq_quote(fetch_json(nasdaq_url), key)
                 row["source_url"] = nasdaq_url
+                row.update(
+                    {
+                        "display_name": item.get("display_name") or row.get("name") or key,
+                        "group": item.get("group"),
+                        "unit": item.get("unit"),
+                        "kind": item.get("kind", "stock"),
+                    }
+                )
                 by_key[key] = row
             except (FetchError, ValueError) as exc:
                 errors.append({"section": "markets", "source": f"Nasdaq:{key}", "error": str(exc)[:120]})
@@ -877,6 +926,14 @@ def collect_markets(errors: list[dict[str, str]]) -> dict[str, Any]:
         )
         for key, row in tencent_rows.items():
             row["source_url"] = tencent_url
+            row.update(
+                {
+                    "display_name": metadata_by_key[key].get("display_name") or row.get("name") or key,
+                    "group": metadata_by_key[key].get("group"),
+                    "unit": metadata_by_key[key].get("unit"),
+                    "kind": metadata_by_key[key].get("kind", "index"),
+                }
+            )
             by_key[key] = row
         if tencent_rows:
             recovered = set(tencent_rows)
@@ -892,9 +949,29 @@ def collect_markets(errors: list[dict[str, str]]) -> dict[str, Any]:
     except (FetchError, ValueError) as exc:
         if any(key not in by_key for key in tencent_symbols.values()):
             errors.append({"section": "markets", "source": "Tencent:A-shares", "error": str(exc)[:120]})
-    ordered = [by_key[item["key"]] for item in MARKET_SYMBOLS if item["key"] in by_key]
-    missing = [item["key"] for item in MARKET_SYMBOLS if item["key"] not in by_key]
-    return {"items": ordered, "missing": missing, "requested": len(MARKET_SYMBOLS)}
+    ordered = [by_key[item["key"]] for item in definitions if item["key"] in by_key]
+    missing = [item["key"] for item in definitions if item["key"] not in by_key]
+    core_items = sum(1 for item in MARKET_SYMBOLS if item["key"] in by_key)
+    futures_items = sum(1 for item in FUTURES_SYMBOLS if item["key"] in by_key)
+    return {
+        "items": ordered,
+        "missing": missing,
+        "requested": len(definitions),
+        "core_items": core_items,
+        "core_requested": len(MARKET_SYMBOLS),
+        "futures_items": futures_items,
+        "futures_requested": len(FUTURES_SYMBOLS),
+    }
+
+
+def collect_earnings_calendar(now: datetime, errors: list[dict[str, str]]) -> dict[str, Any]:
+    return _collect_earnings(
+        STOCK_WATCHLIST,
+        now,
+        fetch_json=fetch_json,
+        fetch_optional_json=fetch_json,
+        errors=errors,
+    )
 
 
 def collect_all(now: datetime | None = None) -> dict[str, Any]:
@@ -931,6 +1008,7 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
         limit=40,
     )
     markets = collect_markets(errors)
+    earnings = collect_earnings_calendar(now, errors)
     successful_news_sources = sum(1 for source in news["sources"] if source["ok"] and source["items"])
     successful_news_lanes = sum(
         1 for lane in news["lanes"] if lane["sources_ok"] and lane["items"]
@@ -949,11 +1027,16 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
         "war_items": len(war["items"]),
         "market_items": len(markets["items"]),
         "market_requested": markets["requested"],
+        "market_futures_items": markets.get("futures_items", 0),
+        "market_futures_requested": markets.get("futures_requested", len(FUTURES_SYMBOLS)),
+        "earnings_available": earnings.get("available", 0),
+        "earnings_requested": earnings.get("requested", len(STOCK_WATCHLIST)),
         "critical": (
             successful_news_sources < 8
             or successful_news_lanes < 7
             or len(news["items"]) < 40
-            or len(markets["items"]) < 20
+            or markets.get("core_items", len(markets["items"]))
+            < min(20, markets.get("core_requested", markets["requested"]))
         ),
     }
     return {
@@ -966,6 +1049,7 @@ def collect_all(now: datetime | None = None) -> dict[str, Any]:
         "think_tanks": think_tanks,
         "war": war,
         "markets": markets,
+        "earnings": earnings,
         "errors": errors,
     }
 
@@ -1012,6 +1096,8 @@ def render_markdown(bundle: dict[str, Any]) -> str:
         f"| 权威智库候选 | {health['think_tank_items']} |",
         f"| 战争观察候选 | {health['war_items']} |",
         f"| 行情 | {health['market_items']}/{health['market_requested']} |",
+        f"| 国际期货 | {health.get('market_futures_items', 0)}/{health.get('market_futures_requested', len(FUTURES_SYMBOLS))} |",
+        f"| 下一次财报日期 | {health.get('earnings_available', 0)}/{health.get('earnings_requested', len(STOCK_WATCHLIST))} |",
         "",
         "## 多源新闻候选（需聚类、核验后选用）",
         "",
@@ -1071,19 +1157,78 @@ def render_markdown(bundle: dict[str, Any]) -> str:
     )
     lines.extend(
         [
-            "## 结构化市场行情",
+            "## 国际期货与大宗商品候选",
+            "",
+            "行情失败时保留标的并显示暂无可靠报价；单位、交易状态和报价时间必须随候选一起核对。",
+            "",
+            "| 分组 | 标的 | 最新价 | 涨跌额 | 涨跌幅 | 单位 | 状态/时间 | 数据源 |",
+            "|---|---|---:|---:|---:|---|---|---|",
+        ]
+    )
+    futures_by_key = {
+        item["key"]: item
+        for item in bundle["markets"]["items"]
+        if item.get("kind") == "futures"
+    }
+    for definition in FUTURES_SYMBOLS:
+        item = futures_by_key.get(definition["key"])
+        if item:
+            source = f"[{_md(item.get('provider'))}]({item.get('source_url')})"
+            price = f"{_md(item.get('price'))} {_md(item.get('currency'))}"
+            change = _md(item.get("change"))
+            change_pct = _md(item.get("change_pct"))
+            status = f"{_md(item.get('market_status'))} / {_md(item.get('data_time'))}"
+        else:
+            source = "—"
+            price = "暂无可靠报价"
+            change = "—"
+            change_pct = "—"
+            status = "unavailable / —"
+        lines.append(
+            f"| {_md(definition.get('group'))} | {_md(definition.get('display_name'))} "
+            f"({_md(definition.get('key'))}) | {price} | {change} | {change_pct} | "
+            f"{_md(definition.get('unit'))} | {status} | {source} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 下一次财报候选",
+            "",
+            "日期只作候选事实；已过日期不会保留，今日预计但未见一手公告时不附链接。",
+            "",
+        ]
+    )
+    for item in bundle.get("earnings", {}).get("items", []):
+        next_date = _md(item.get("next_date")) if item.get("next_date") else "暂无可靠日期"
+        status = _md(item.get("date_status"))
+        release = ""
+        if item.get("today_release") and item.get("official_link"):
+            release = f"；今日官方公告：[{_md(item.get('official_link'))}]({item.get('official_link')})"
+        elif item.get("today_expected"):
+            release = "；今日预计，尚未见官方公告"
+        source = _md(item.get("source_name"))
+        lines.append(
+            f"- {_md(item.get('key'))}｜{_md(item.get('display_name'))}｜下一次财报：{next_date}（{status}）"
+            f"{release}｜日期来源：{source}"
+        )
+    lines.extend(
+        [
+            "",
+            "## 结构化股票与指数行情",
             "",
             "| 标的 | 最新价 | 涨跌额 | 涨跌幅 | 状态/时间 | 盘前盘后 | 数据源 |",
             "|---|---:|---:|---:|---|---|---|",
         ]
     )
     for item in bundle["markets"]["items"]:
+        if item.get("kind") == "futures":
+            continue
         ext = item.get("extended")
         ext_text = (
             f"{ext.get('type')}: {ext.get('price')} ({ext.get('change_pct')})" if ext else "—"
         )
         lines.append(
-            f"| {_md(item['key'])} | {_md(item.get('price'))} {_md(item.get('currency'))} | "
+            f"| {_md(item.get('display_name') or item['key'])} ({_md(item['key'])}) | {_md(item.get('price'))} {_md(item.get('currency'))} | "
             f"{_md(item.get('change'))} | {_md(item.get('change_pct'))} | "
             f"{_md(item.get('market_status'))} / {_md(item.get('data_time'))} | {_md(ext_text)} | "
             f"[{_md(item.get('provider'))}]({item.get('source_url')}) |"

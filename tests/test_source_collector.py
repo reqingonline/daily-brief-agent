@@ -188,6 +188,10 @@ class SourceCollectorParserTests(unittest.TestCase):
             collector, "collect_buzzing", return_value=buzzing
         ), mock.patch.object(collector, "collect_feed_group", return_value=empty_group), mock.patch.object(
             collector, "collect_markets", return_value={"items": market_items, "missing": [], "requested": 20}
+        ), mock.patch.object(
+            collector,
+            "collect_earnings_calendar",
+            return_value={"items": [], "requested": 0, "available": 0},
         ):
             bundle = collector.collect_all(datetime(2026, 8, 14, tzinfo=timezone.utc))
         self.assertFalse(bundle["health"]["critical"])
@@ -329,6 +333,19 @@ class SourceCollectorParserTests(unittest.TestCase):
         self.assertEqual(symbols["Shenzhen Component"]["yahoo"], "399001.SZ")
         self.assertNotIn("SPCX", symbols)
         self.assertNotIn("SKHX", symbols)
+        self.assertEqual(symbols["02513.HK"]["display_name"], "智谱（Z.AI）")
+        self.assertIn("hkexnews.hk", symbols["02513.HK"]["identity_source_url"])
+
+    def test_futures_registry_has_required_groups_and_symbols(self):
+        futures = {item["key"]: item for item in collector.FUTURES_SYMBOLS}
+        self.assertEqual(
+            {item["yahoo"] for item in futures.values()},
+            {"ZC=F", "ZW=F", "ZS=F", "GC=F", "SI=F", "HG=F"},
+        )
+        self.assertEqual(
+            {item["group"] for item in futures.values()},
+            {"国际粮食", "贵金属", "工业金属"},
+        )
 
     def test_rendered_bundle_has_new_sections_and_no_social_sections(self):
         empty_group = {"sources": [], "items": []}
@@ -355,6 +372,8 @@ class SourceCollectorParserTests(unittest.TestCase):
         self.assertIn("## 事实核查候选", output)
         self.assertIn("## 权威智库报告候选", output)
         self.assertIn("## 国际战争观察候选", output)
+        self.assertIn("## 国际期货与大宗商品候选", output)
+        self.assertIn("## 下一次财报候选", output)
         self.assertNotIn("微博当日结构化前十", output)
         self.assertNotIn("X 公开趋势快照", output)
 
@@ -409,6 +428,28 @@ class SourceCollectorParserTests(unittest.TestCase):
         self.assertAlmostEqual(result["change"], 0.48, places=2)
         self.assertAlmostEqual(result["change_pct"], 0.144, places=2)
         self.assertEqual(result["provider"], "Yahoo Finance chart")
+
+    def test_parse_yahoo_adds_futures_metadata(self):
+        payload = {
+            "chart": {
+                "result": [{
+                    "meta": {
+                        "symbol": "GC=F",
+                        "currency": "USD",
+                        "regularMarketPrice": 3400.0,
+                        "chartPreviousClose": 3380.0,
+                        "regularMarketTime": 1784318401,
+                        "longName": "Gold",
+                    }
+                }],
+                "error": None,
+            }
+        }
+        result = collector.parse_yahoo_quote(payload, "黄金期货", collector.FUTURES_SYMBOLS[3])
+        self.assertEqual(result["kind"], "futures")
+        self.assertEqual(result["group"], "贵金属")
+        self.assertEqual(result["unit"], "美元/金衡盎司")
+        self.assertEqual(result["display_name"], "黄金")
 
     def test_parse_tencent_quotes_for_china_indexes(self):
         payload = (

@@ -12,7 +12,21 @@ def build_mail(*, global_count: int = 8, history_count: int = 3, market: bool = 
         for i in range(1, global_count + 1)
     )
     history_items = "".join(f"<h3>{1900 + i}年：历史事件 {i}</h3>" for i in range(history_count))
-    market_html = "<h2>七、市场总览</h2><h2>八、股票与指数</h2>" if market else ""
+    futures_html = (
+        "<h2>八、国际期货与大宗商品</h2>"
+        "<h3>玉米期货 ZC=F</h3><h3>小麦期货 ZW=F</h3><h3>大豆期货 ZS=F</h3>"
+        "<h3>黄金期货 GC=F</h3><h3>白银期货 SI=F</h3><h3>铜期货 HG=F</h3>"
+    ) if market else ""
+    stocks_html = (
+        "<h2>九、股票与指数</h2>"
+        "<h3>AAPL 苹果｜下一次财报：2026-10-29（预计）</h3>"
+        "<h3>02513.HK 智谱（Z.AI）｜下一次财报：暂无可靠日期</h3>"
+    ) if market else ""
+    market_html = (
+        "<h2>七、市场总览</h2>" + futures_html + stocks_html
+        if market
+        else ""
+    )
     return f"""Subject: 每日大事与市场简报 - 2026-08-04 11:00 中国时间
 <html><body>
 <h2>一、本期 5 个要点</h2>
@@ -68,6 +82,21 @@ class ValidateBriefTests(unittest.TestCase):
         self.assertIn("google_news_link_present", errors)
         social = build_mail().replace("<h2>三、事实核查</h2>", "<h2>X 平台热帖</h2>")
         self.assertIn("cancelled_social_section_present", validator.validate(social, date(2026, 8, 4)))
+
+    def test_earnings_link_requires_today_and_first_party_domain(self):
+        stale = '<a href="https://finance.yahoo.com/quote/AAPL">今日财报：2026-08-03｜官方公告链接</a>'
+        errors = validator.validate(build_mail(extra_link=stale), date(2026, 8, 4))
+        self.assertIn("earnings_discovery_link_present", errors)
+        self.assertIn("earnings_link_date_not_today", errors)
+
+        official = '<a href="https://www.sec.gov/Archives/edgar/data/320193/20260804/results.htm">官方公告</a>'
+        self.assertNotIn(
+            "earnings_official_domain_unapproved:sec.gov",
+            validator.validate(
+                build_mail(extra_link=f"今日财报：2026-08-04｜{official}"),
+                date(2026, 8, 4),
+            ),
+        )
 
     def test_invented_think_tank_author_placeholder_is_rejected(self):
         mail = build_mail().replace("<h2>五、权威智库报告</h2>", "<h2>五、权威智库报告</h2><p>作者：某机构研究团队</p>")

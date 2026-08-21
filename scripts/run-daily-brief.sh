@@ -106,6 +106,8 @@ basic_quality_gate() {
     && grep -q '国际关系观察' "$output_file" \
     && grep -q '权威智库报告' "$output_file" \
     && grep -q '国际战争观察' "$output_file" \
+    && grep -q '国际期货与大宗商品' "$output_file" \
+    && grep -q '下一次财报' "$output_file" \
     && grep -q '历史上的今天' "$output_file"
 }
 

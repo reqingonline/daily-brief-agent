@@ -43,9 +43,10 @@
 
 ## Task 4: 本地回归、隐私扫描和可发布提交
 
-**Files:** changed files only; `docs/superpowers/specs/2026-08-21-commodity-futures-earnings-design.md`; `docs/superpowers/plans/2026-08-21-commodity-futures-earnings.md`
+**Files:** changed files only; `CHANGELOG.md`; `CONTRIBUTING.md`; `docs/superpowers/specs/2026-08-21-commodity-futures-earnings-design.md`; `docs/superpowers/plans/2026-08-21-commodity-futures-earnings.md`
 
 - [ ] 检查 Python 版本和仓库本地虚拟环境；使用仓库已有环境执行完整测试、编译检查和 validator/source collector dry-run，不安装全局依赖，不把真实 API key、邮箱、IP、SSH key、bearer URL、Gmail 内容或生产路径写入公开文件。
+- [ ] 在同一提交更新 `CHANGELOG.md`，写明本次提交消息、受影响的日报栏目/内部模块、具体更新和验证证据；`CONTRIBUTING.md` 保持“每次提交同步变更日志”的约定，避免以后只看 commit 标题无法知道改了哪一栏。
 - [ ] 用 `rg` 扫描变更内容中的私有主机地址、私有文件系统路径、凭据文件名、PEM 私钥块、bearer/auth 头、邮箱地址和完整敏感 URL；检查 fixture、日志和异常文本没有泄露请求头/凭据。
 - [ ] 检查 `git status --short`、`git diff --stat`、`git diff --check`、分支名和最近提交；仅 stage 本功能涉及的精确路径，创建一个实现提交和一个必要的文档提交，保留现有 Draft PR #1 的分支与内容不变。
 - [ ] 推送 `feature/commodity-futures-earnings` 到 `reqingonline/daily-brief-agent`，用 `main` 为 base 创建 Draft PR，正文列出测试结果、数据源/官方链接闸门、未验证边界和“公开仓库提交不等于生产部署”；不自动合并。
