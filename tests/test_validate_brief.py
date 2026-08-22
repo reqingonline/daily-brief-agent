@@ -6,7 +6,16 @@ from datetime import date
 from daily_brief_agent import validate_brief as validator
 
 
-def build_mail(*, global_count: int = 8, history_count: int = 3, market: bool = True, extra_link: str = "") -> str:
+def build_mail(
+    *,
+    global_count: int = 8,
+    history_count: int = 3,
+    market: bool = True,
+    extra_link: str = "",
+    stock_extra_link: str = "",
+    hour: str = "11",
+    history: bool = True,
+) -> str:
     global_items = "".join(
         f'<h3>{i}.【领域】事件 {i}<a href="https://source{i}.example.com/item/{i}">来源</a></h3>'
         for i in range(1, global_count + 1)
@@ -20,14 +29,15 @@ def build_mail(*, global_count: int = 8, history_count: int = 3, market: bool = 
     stocks_html = (
         "<h2>九、股票与指数</h2>"
         "<h3>AAPL 苹果｜下一次财报：2026-10-29（预计）</h3>"
-        "<h3>02513.HK 智谱（Z.AI）｜下一次财报：暂无可靠日期</h3>"
+        f"<h3>02513.HK 智谱（Z.AI）｜下一次财报：暂无可靠日期</h3>{stock_extra_link}"
     ) if market else ""
     market_html = (
         "<h2>七、市场总览</h2>" + futures_html + stocks_html
         if market
         else ""
     )
-    return f"""Subject: 每日大事与市场简报 - 2026-08-04 11:00 中国时间
+    history_html = f'<h2>九、历史上的今天</h2>{history_items}' if history else ""
+    return f"""Subject: 每日大事与市场简报 - 2026-08-04 {hour}:00 中国时间
 <html><body>
 <h2>一、本期 5 个要点</h2>
 <h2>二、全球重大事件</h2>{global_items}
@@ -36,7 +46,7 @@ def build_mail(*, global_count: int = 8, history_count: int = 3, market: bool = 
 <h2>五、权威智库报告</h2>
 <h2>六、国际战争观察</h2>
 {market_html}
-<h2>九、历史上的今天</h2>{history_items}
+{history_html}
 <p><a href="https://example.com/source">来源</a>{extra_link}</p>
 <h2>数据与方法说明</h2>
 </body></html>"""
@@ -58,6 +68,24 @@ class ValidateBriefTests(unittest.TestCase):
 
     def test_weekend_allows_market_omission(self):
         self.assertEqual(validator.validate(build_mail(market=False), date(2026, 8, 8)), [])
+
+    def test_weekend_rejects_market_sections(self):
+        errors = validator.validate(build_mail(), date(2026, 8, 8))
+        self.assertIn("weekend_market_sections_present", errors)
+
+    def test_weekend_skips_earnings_link_validation(self):
+        official_news = '<a href="https://www.justice.gov/opa/pr/example">官方公告：美国司法部（2026年8月21日）</a>'
+        self.assertEqual(
+            validator.validate(build_mail(market=False, extra_link=official_news), date(2026, 8, 8)),
+            [],
+        )
+
+    def test_late_edition_suppresses_history_section(self):
+        self.assertEqual(validator.validate(build_mail(hour="23", history=False), date(2026, 8, 4)), [])
+        self.assertIn(
+            "history_section_forbidden_at_23",
+            validator.validate(build_mail(hour="23"), date(2026, 8, 4)),
+        )
 
     def test_global_events_have_hard_maximum(self):
         errors = validator.validate(build_mail(global_count=16), date(2026, 8, 4))
@@ -85,7 +113,7 @@ class ValidateBriefTests(unittest.TestCase):
 
     def test_earnings_link_requires_today_and_first_party_domain(self):
         stale = '<a href="https://finance.yahoo.com/quote/AAPL">今日财报：2026-08-03｜官方公告链接</a>'
-        errors = validator.validate(build_mail(extra_link=stale), date(2026, 8, 4))
+        errors = validator.validate(build_mail(stock_extra_link=stale), date(2026, 8, 4))
         self.assertIn("earnings_discovery_link_present", errors)
         self.assertIn("earnings_link_date_not_today", errors)
 
@@ -93,10 +121,14 @@ class ValidateBriefTests(unittest.TestCase):
         self.assertNotIn(
             "earnings_official_domain_unapproved:sec.gov",
             validator.validate(
-                build_mail(extra_link=f"今日财报：2026-08-04｜{official}"),
+                build_mail(stock_extra_link=f"今日财报：2026-08-04｜{official}"),
                 date(2026, 8, 4),
             ),
         )
+
+    def test_non_earnings_official_links_are_not_treated_as_earnings(self):
+        official_news = '<a href="https://www.justice.gov/opa/pr/example">官方公告：美国司法部（2026年8月21日）</a>'
+        self.assertEqual(validator.validate(build_mail(extra_link=official_news), date(2026, 8, 4)), [])
 
     def test_invented_think_tank_author_placeholder_is_rejected(self):
         mail = build_mail().replace("<h2>五、权威智库报告</h2>", "<h2>五、权威智库报告</h2><p>作者：某机构研究团队</p>")

@@ -168,9 +168,19 @@ def _source_quality_errors(section_name: str, section: dict[str, Any]) -> list[s
     return errors
 
 
+def _earnings_section_content(content: str) -> str:
+    match = re.search(
+        r"<h2\b[^>]*>.*?股票与指数.*?</h2>(.*?)(?=<h2\b|</body\b|</html\b)",
+        content,
+        re.I | re.S,
+    )
+    return match.group(1) if match else ""
+
+
 def _earnings_anchor_links(content: str) -> list[tuple[str, str]]:
     links: list[tuple[str, str]] = []
-    for match in re.finditer(r"<a\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", content, re.I | re.S):
+    section_content = _earnings_section_content(content)
+    for match in re.finditer(r"<a\b[^>]*href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", section_content, re.I | re.S):
         label = _clean(re.sub(r"<[^>]+>", " ", match.group(2)))
         if "财报" in label or "官方公告" in label:
             links.append((match.group(1), label))
@@ -191,7 +201,7 @@ def _earnings_link_errors(content: str, local_date: date) -> list[str]:
             errors.append(f"earnings_official_domain_unapproved:{host or 'missing'}")
         if re.search(r"/(?:search|search-results?)(?:/|\\?|$)", parsed.path + (f"?{parsed.query}" if parsed.query else ""), re.I):
             errors.append("earnings_search_page_present")
-    dates = re.findall(r"(?:今日财报|官方公告)[：:]\s*(\d{4}-\d{2}-\d{2})", content)
+    dates = re.findall(r"(?:今日财报|官方公告)[：:]\s*(\d{4}-\d{2}-\d{2})", _earnings_section_content(content))
     if any(value != local_date.isoformat() for value in dates):
         errors.append("earnings_link_date_not_today")
     return sorted(set(errors))
@@ -199,14 +209,21 @@ def _earnings_link_errors(content: str, local_date: date) -> list[str]:
 
 def validate(content: str, local_date: date) -> list[str]:
     errors: list[str] = []
-    if not re.search(r"(?m)^Subject:\s*每日大事与市场简报\s*-\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+中国时间\s*$", content):
+    subject_match = re.search(
+        r"(?m)^Subject:\s*每日大事与市场简报\s*-\s*\d{4}-\d{2}-\d{2}\s+(?P<hour>\d{2}):\d{2}\s+中国时间\s*$",
+        content,
+    )
+    if not subject_match:
         errors.append("subject_format_invalid")
     if not re.search(r"<html\b", content, flags=re.IGNORECASE) or not re.search(r"</html>\s*$", content, flags=re.IGNORECASE):
         errors.append("html_document_incomplete")
 
     parser = StructureParser()
     parser.feed(content)
-    required = ("本期 5 个要点", "全球重大事件", "事实核查", "国际关系观察", "权威智库报告", "国际战争观察", "历史上的今天")
+    history_suppressed = subject_match is not None and subject_match.group("hour") == "23"
+    required = ("本期 5 个要点", "全球重大事件", "事实核查", "国际关系观察", "权威智库报告", "国际战争观察")
+    if not history_suppressed:
+        required += ("历史上的今天",)
     for name in required:
         if _find_section(parser.sections, name)[1] is None:
             errors.append(f"required_section_missing:{name}")
@@ -217,9 +234,13 @@ def validate(content: str, local_date: date) -> list[str]:
         errors.append(f"global_event_count:{global_count}_not_in_1_15")
 
     history_index, history_section = _find_section(parser.sections, "历史上的今天")
-    history_count = max(history_section["h3_count"], history_section["li_count"]) if history_section else 0
-    if not 3 <= history_count <= 5:
-        errors.append(f"history_event_count:{history_count}_not_in_3_5")
+    if history_suppressed:
+        if history_section is not None:
+            errors.append("history_section_forbidden_at_23")
+    else:
+        history_count = max(history_section["h3_count"], history_section["li_count"]) if history_section else 0
+        if not 3 <= history_count <= 5:
+            errors.append(f"history_event_count:{history_count}_not_in_3_5")
     method_index, _ = _find_section(parser.sections, "数据与方法说明")
     if method_index >= 0 and history_index >= method_index:
         errors.append("history_not_before_method_footer")
@@ -228,9 +249,13 @@ def validate(content: str, local_date: date) -> list[str]:
     market_present = _find_section(parser.sections, "市场总览")[1] is not None
     futures_present = _find_section(parser.sections, "国际期货与大宗商品")[1] is not None
     stocks_present = _find_section(parser.sections, "股票与指数")[1] is not None
-    if local_date.weekday() < 5 and not (market_present and futures_present and stocks_present):
-        errors.append("weekday_market_sections_missing")
-    if local_date.weekday() < 5:
+    is_weekend = local_date.weekday() >= 5
+    if is_weekend:
+        if market_present or futures_present or stocks_present or re.search(r"下一次财报", visible_text):
+            errors.append("weekend_market_sections_present")
+    else:
+        if not (market_present and futures_present and stocks_present):
+            errors.append("weekday_market_sections_missing")
         if not re.search(r"下一次财报", visible_text):
             errors.append("earnings_fields_missing")
         if not futures_present or not all(key in visible_text for key in _FUTURES_MARKET_KEYS):
@@ -249,7 +274,8 @@ def validate(content: str, local_date: date) -> list[str]:
     _, war_section = _find_section(parser.sections, "国际战争观察")
     if war_section:
         errors.extend(_source_quality_errors("国际战争观察", war_section))
-    errors.extend(_earnings_link_errors(content, local_date))
+    if not is_weekend:
+        errors.extend(_earnings_link_errors(content, local_date))
     return errors
 
 

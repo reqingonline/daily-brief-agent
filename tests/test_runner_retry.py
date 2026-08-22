@@ -158,6 +158,7 @@ cat > "${FAKE_PROMPT_PREFIX:?}-$count.txt"
             self.assertEqual((root / "codex.calls").read_text(encoding="utf-8").strip(), "2")
             self.assertTrue((root / "smtp.called").is_file())
             self.assertIn("brief_validation_error=source_concentration_exceeded:全球重大事件", combined)
+            self.assertNotIn("generated_quality_gate", combined)
             self.assertIn("brief_repair_attempt=1", combined)
             self.assertIn("brief_repair=ok attempts=1", combined)
             self.assertIn("recipient_count=1", combined)

@@ -12,6 +12,13 @@
 - 验证：<测试、校验或未验证边界>
 ```
 
+## 2026-08-22 · fix: allow weekend briefs without market sections
+
+- 提交：`fix: allow weekend briefs without market sections`（提交前记录）
+- 栏目/模块：周末版质量闸门、市场总览、国际期货与大宗商品、股票与指数、下一次财报
+- 更新：移除 Bash 中重复且无上下文的 generated_quality_gate 业务检查，改为轻量输出预检并统一交给 validator；按 Asia/Shanghai 周六、周日省略并禁止市场/期货/股票/财报板块，跳过周末财报链接校验；补齐 23:00 版历史板块规则，并把财报链接校验限定在“股票与指数”板块，避免普通新闻“官方公告”链接被误判为财报。
+- 验证：新增周末允许省略、拒绝市场板块、跳过财报链接和 23:00 版规则的回归测试；生产真实邮件发送将在下一次自动定时运行观察，不手动补发。
+
 ## 2026-08-21 · docs: design commodity and earnings sections
 
 - 提交：`c57fcab`

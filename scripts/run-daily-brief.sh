@@ -94,21 +94,9 @@ run_codex() {
   return "$status"
 }
 
-basic_quality_gate() {
+output_preflight() {
   local output_file="$1"
-  local output_bytes
-  output_bytes="$(wc -c < "$output_file")"
-  (( output_bytes >= 1500 )) \
-    && grep -q '^Subject: 每日大事与市场简报 - ' "$output_file" \
-    && grep -qi '<html' "$output_file" \
-    && grep -q '全球重大事件' "$output_file" \
-    && grep -q '事实核查' "$output_file" \
-    && grep -q '国际关系观察' "$output_file" \
-    && grep -q '权威智库报告' "$output_file" \
-    && grep -q '国际战争观察' "$output_file" \
-    && grep -q '国际期货与大宗商品' "$output_file" \
-    && grep -q '下一次财报' "$output_file" \
-    && grep -q '历史上的今天' "$output_file"
+  [[ -s "$output_file" ]]
 }
 
 stage_start="$(date +%s)"
@@ -153,8 +141,8 @@ repair_attempt=0
 while true; do
   validation_errors=""
   stage_start="$(date +%s)"
-  if ! basic_quality_gate "$last_output"; then
-    validation_errors="brief_validation_error=generated_quality_gate"
+  if ! output_preflight "$last_output"; then
+    validation_errors="brief_validation_error=generated_output_empty"
     printf '%s\n' "$validation_errors" >&2
   elif validation_errors="$("$PYTHON" -m "$VALIDATOR_MODULE" "$last_output" --date "$local_date" 2>&1)"; then
     printf '%s\n' "$validation_errors"
