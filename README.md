@@ -101,3 +101,12 @@ python tools/privacy_scan.py
 ## 许可证
 
 [MIT](LICENSE)
+
+
+## Star 趋势
+
+<p align="center">
+  <a href="https://www.star-history.com/?repos=reqingonline%2Fdaily-brief-agent&amp;type=date&amp;legend=top-left">
+    <img src="https://api.star-history.com/chart?repos=reqingonline%2Fdaily-brief-agent&amp;type=date&amp;legend=top-left" alt="reqingonline/daily-brief-agent Star 趋势" width="100%" />
+  </a>
+</p>
