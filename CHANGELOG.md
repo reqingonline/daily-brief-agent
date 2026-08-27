@@ -14,7 +14,7 @@
 
 ## 2026-08-28 · fix: make fact-check section conditional and retain Codex diagnostics
 
-- 提交：`<commit after push>`
+- 提交：`f9b610c`
 - 栏目/模块：事实核查质量闸门、日报 runner、Codex 生成失败诊断
 - 更新：事实核查在当天没有合适候选时允许省略，但不放宽其他栏目、来源多样性、财报官方链接或 SMTP 发送闸门；Codex 非零退出与空最终输出分别记录退出状态、stderr 和 JSON 事件诊断，并继续 fail-closed，不向收件人发送未通过校验的邮件。
 - 验证：新增事实核查可省略、空输出重试与非零退出诊断回归测试；完整测试和 Bash 语法检查通过。生产下一次原定任务的真实发送结果仍需单独验收，未手动补发昨晚邮件。
