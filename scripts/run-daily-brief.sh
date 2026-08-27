@@ -67,13 +67,25 @@ editorial_markdown="$WORKSPACE/editorial-context.md"
 combined_prompt="$(mktemp "$WORKSPACE/.brief-prompt-$timestamp.XXXXXX.txt")"
 repair_prompt="$(mktemp "$WORKSPACE/.brief-repair-$timestamp.XXXXXX.txt")"
 last_output="$(mktemp "$WORKSPACE/.last-message-$timestamp.XXXXXX.md")"
-trap 'rm -f "$combined_prompt" "$repair_prompt" "$last_output"' EXIT
+codex_stderr="$(mktemp "$WORKSPACE/.codex-stderr-$timestamp.XXXXXX.log")"
+usage_events="$(mktemp "$WORKSPACE/.codex-events-$timestamp.XXXXXX.jsonl")"
+trap 'rm -f "$combined_prompt" "$repair_prompt" "$last_output" "$codex_stderr" "$usage_events"' EXIT
+
+save_codex_diagnostics() {
+  local attempt="$1"
+  local reason="$2"
+  local prefix="$LOG_DIR/codex-diagnostics-$timestamp-attempt-$attempt-$reason"
+  install -m 600 "$codex_stderr" "${prefix}.stderr"
+  install -m 600 "$usage_events" "${prefix}.jsonl"
+  echo "codex_diagnostics_saved=${prefix}.*" >&2
+}
 
 run_codex() {
   local prompt_file="$1"
   local attempt="$2"
   local started status elapsed
   : > "$last_output"
+  : > "$codex_stderr"
   started="$(date +%s)"
   set +e
   "$CODEX_BIN" \
@@ -86,11 +98,17 @@ run_codex() {
     --model "$CODEX_MODEL" \
     --config "model_reasoning_effort=\"$CODEX_REASONING_EFFORT\"" \
     --output-last-message "$last_output" \
-    - < "$prompt_file" >/dev/null 2>&1
+    --json \
+    - < "$prompt_file" >> "$usage_events" 2> "$codex_stderr"
   status=$?
   set -e
+  printf '\n' >> "$usage_events"
   elapsed=$(( $(date +%s) - started ))
   echo "model_generation_seconds=$elapsed attempt=$attempt"
+  if (( status != 0 )); then
+    echo "codex_exit_status=$status attempt=$attempt" >&2
+    save_codex_diagnostics "$attempt" "exit-$status"
+  fi
   return "$status"
 }
 
@@ -142,7 +160,8 @@ while true; do
   validation_errors=""
   stage_start="$(date +%s)"
   if ! output_preflight "$last_output"; then
-    validation_errors="brief_validation_error=generated_output_empty"
+    validation_errors="codex_output_empty"
+    save_codex_diagnostics "$repair_attempt" "empty-output"
     printf '%s\n' "$validation_errors" >&2
   elif validation_errors="$("$PYTHON" -m "$VALIDATOR_MODULE" "$last_output" --date "$local_date" 2>&1)"; then
     printf '%s\n' "$validation_errors"
@@ -167,7 +186,12 @@ while true; do
   {
     cat "$combined_prompt"
     printf '\n\n【自动质量修复要求开始】\n'
-    printf '上一版完整邮件未通过本地质量校验。请重新生成完整邮件，不要解释修复过程，不要输出草稿或修复说明。必须修复下面列出的全部错误，且不得降低、删除或绕过原有质量标准。\n'
+    if [[ "$validation_errors" == "codex_output_empty" ]]; then
+      printf '上一轮 Codex 调用没有产生最终输出。请重新生成完整邮件，不要解释修复过程，不要输出草稿或修复说明。\n'
+    else
+      printf '上一版完整邮件未通过本地质量校验。请重新生成完整邮件，不要解释修复过程，不要输出草稿或修复说明。\n'
+    fi
+    printf '必须修复下面列出的全部错误，且不得降低、删除或绕过原有质量标准。\n'
     printf '校验错误：\n%s\n' "$validation_errors"
     if [[ "$validation_errors" == *source_concentration* || "$validation_errors" == *source_diversity* ]]; then
       printf '特别要求：在“全球重大事件”栏目中，同一主域名作为来源链接的独立事件数最多 3 条；尽量使用至少 6 个不同来源域名；若可靠来源不足，减少事件数量，不得用重复来源凑数。\n'

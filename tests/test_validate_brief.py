@@ -15,6 +15,7 @@ def build_mail(
     stock_extra_link: str = "",
     hour: str = "11",
     history: bool = True,
+    fact_check: bool = True,
 ) -> str:
     global_items = "".join(
         f'<h3>{i}.【领域】事件 {i}<a href="https://source{i}.example.com/item/{i}">来源</a></h3>'
@@ -37,11 +38,12 @@ def build_mail(
         else ""
     )
     history_html = f'<h2>九、历史上的今天</h2>{history_items}' if history else ""
+    fact_check_html = "<h2>三、事实核查</h2>" if fact_check else ""
     return f"""Subject: 每日大事与市场简报 - 2026-08-04 {hour}:00 中国时间
 <html><body>
 <h2>一、本期 5 个要点</h2>
 <h2>二、全球重大事件</h2>{global_items}
-<h2>三、事实核查</h2>
+{fact_check_html}
 <h2>四、国际关系观察</h2>
 <h2>五、权威智库报告</h2>
 <h2>六、国际战争观察</h2>
@@ -61,6 +63,12 @@ def build_list_history_mail(history_count: int = 4) -> str:
 class ValidateBriefTests(unittest.TestCase):
     def test_valid_weekday_mail_passes(self):
         self.assertEqual(validator.validate(build_mail(), date(2026, 8, 4)), [])
+
+    def test_fact_check_section_is_optional_when_no_candidate_exists(self):
+        self.assertEqual(
+            validator.validate(build_mail(fact_check=False), date(2026, 8, 4)),
+            [],
+        )
 
     def test_weekday_requires_market_sections(self):
         errors = validator.validate(build_mail(market=False), date(2026, 8, 4))

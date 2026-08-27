@@ -221,7 +221,11 @@ def validate(content: str, local_date: date) -> list[str]:
     parser = StructureParser()
     parser.feed(content)
     history_suppressed = subject_match is not None and subject_match.group("hour") == "23"
-    required = ("本期 5 个要点", "全球重大事件", "事实核查", "国际关系观察", "权威智库报告", "国际战争观察")
+    # Fact-checking is conditional: the prompt explicitly allows omitting the
+    # section when there is no suitable high-impact claim to verify. If the
+    # section is present, its content remains part of the generated brief and
+    # is not otherwise relaxed by this structural rule.
+    required = ("本期 5 个要点", "全球重大事件", "国际关系观察", "权威智库报告", "国际战争观察")
     if not history_suppressed:
         required += ("历史上的今天",)
     for name in required:
