@@ -1,8 +1,8 @@
 [Unit]
-Description=Start daily briefing generation at 11:00 and 23:00 China time
+Description=Start daily briefing generation at 05:00 and 17:00 China time
 
 [Timer]
-OnCalendar=*-*-* 11,23:00:00 Asia/Shanghai
+OnCalendar=*-*-* 05,17:00:00 Asia/Shanghai
 Persistent=true
 AccuracySec=1s
 Unit=daily-brief-agent.service

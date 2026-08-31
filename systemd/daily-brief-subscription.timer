@@ -2,7 +2,7 @@
 Description=Refresh subscriptions 15 minutes before briefing generation
 
 [Timer]
-OnCalendar=*-*-* 10,22:45:00 Asia/Shanghai
+OnCalendar=*-*-* 04,16:45:00 Asia/Shanghai
 Persistent=true
 AccuracySec=1s
 Unit=daily-brief-subscription.service

@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+LATE_EDITION_START_HOUR = 17
 USER_AGENT = "DailyBriefEditorialContext/1.0 (private email automation)"
 
 
@@ -123,13 +124,13 @@ def recent_message_files(log_dir: Path, limit: int = 14) -> list[Path]:
 def edition_context(now: datetime | None = None) -> dict[str, Any]:
     now = (now or datetime.now(SHANGHAI)).astimezone(SHANGHAI)
     weekend = now.weekday() >= 5
-    edition = "午间版" if now.hour < 17 else "晚间版"
+    edition = "早间版" if now.hour < LATE_EDITION_START_HOUR else "晚间版"
     if weekend:
         market_rule = "weekend_omit"
         market_note = "北京周末：默认省略市场总览和股票表格，只在发生重大公司或宏观事件时写非报价型财经新闻。"
-    elif edition == "午间版":
+    elif edition == "早间版":
         market_rule = "weekday_morning"
-        market_note = "工作日午间版：A 股和港股可能盘中；美股使用上一交易日收盘或可靠盘前数据，并逐项标明状态。"
+        market_note = "工作日早间版：A 股和港股尚未开盘，使用最近有效收盘；美股使用上一交易日收盘或可靠盘前数据，并逐项标明状态。"
     else:
         market_rule = "weekday_evening"
         market_note = "工作日晚间版：A 股和港股使用当日收盘；美股通常处于盘前或盘中，并逐项标明状态。"

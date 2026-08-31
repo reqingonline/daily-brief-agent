@@ -8,10 +8,10 @@ from daily_brief_agent.smtp_send import build_message, split_subject_body
 class SMTPMessageTests(unittest.TestCase):
     def test_split_subject_body_uses_generated_subject(self) -> None:
         subject, body = split_subject_body(
-            "\nSubject: 每日大事与市场简报 - 2026-07-28 23:00 中国时间\n\n<html>正文</html>",
+            "\nSubject: 每日大事与市场简报 - 2026-07-28 17:00 中国时间\n\n<html>正文</html>",
             "fallback",
         )
-        self.assertEqual(subject, "每日大事与市场简报 - 2026-07-28 23:00 中国时间")
+        self.assertEqual(subject, "每日大事与市场简报 - 2026-07-28 17:00 中国时间")
         self.assertEqual(body, "<html>正文</html>\n")
 
     def test_html_message_has_plain_and_html_alternatives(self) -> None:

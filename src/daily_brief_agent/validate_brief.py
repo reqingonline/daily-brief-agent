@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+LATE_EDITION_HOUR = "17"
 _ENGLISH_LEAK_PATTERNS = (
     re.compile(r"\breportedly\b", re.IGNORECASE),
     re.compile(r"\bas of (?:generation|writing) time\b", re.IGNORECASE),
@@ -220,7 +221,7 @@ def validate(content: str, local_date: date) -> list[str]:
 
     parser = StructureParser()
     parser.feed(content)
-    history_suppressed = subject_match is not None and subject_match.group("hour") == "23"
+    history_suppressed = subject_match is not None and subject_match.group("hour") == LATE_EDITION_HOUR
     # Fact-checking is conditional: the prompt explicitly allows omitting the
     # section when there is no suitable high-impact claim to verify. If the
     # section is present, its content remains part of the generated brief and
@@ -240,7 +241,7 @@ def validate(content: str, local_date: date) -> list[str]:
     history_index, history_section = _find_section(parser.sections, "历史上的今天")
     if history_suppressed:
         if history_section is not None:
-            errors.append("history_section_forbidden_at_23")
+            errors.append("history_section_forbidden_at_17")
     else:
         history_count = max(history_section["h3_count"], history_section["li_count"]) if history_section else 0
         if not 3 <= history_count <= 5:

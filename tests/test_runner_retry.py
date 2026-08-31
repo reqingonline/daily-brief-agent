@@ -113,7 +113,7 @@ count=$((count + 1))
 printf '%s\\n' "$count" > "$FAKE_CALLS_FILE"
 cat > "${FAKE_PROMPT_PREFIX:?}-$count.txt"
 {
-  printf 'Subject: 每日大事与市场简报 - 2026-01-01 11:00 中国时间\\n'
+  printf 'Subject: 每日大事与市场简报 - 2026-01-01 05:00 中国时间\\n'
   printf '<html><body><h2>全球重大事件</h2><p>完整测试内容</p>'
   printf '<h2>事实核查</h2><p>测试</p><h2>国际关系观察</h2><p>测试</p>'
   printf '<h2>权威智库报告</h2><p>测试</p><h2>国际战争观察</h2><p>测试</p>'
@@ -252,7 +252,7 @@ if (( count == 1 )); then
   exit 0
 fi
 printf 'fake stderr: second call completed\n' >&2
-printf 'Subject: 每日大事与市场简报 - 2026-01-01 11:00 中国时间\n<html><body>valid retry output</body></html>\n' > "$output"
+printf 'Subject: 每日大事与市场简报 - 2026-01-01 05:00 中国时间\n<html><body>valid retry output</body></html>\n' > "$output"
 """,
             )
 

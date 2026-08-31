@@ -13,7 +13,7 @@ def build_mail(
     market: bool = True,
     extra_link: str = "",
     stock_extra_link: str = "",
-    hour: str = "11",
+    hour: str = "05",
     history: bool = True,
     fact_check: bool = True,
 ) -> str:
@@ -89,10 +89,10 @@ class ValidateBriefTests(unittest.TestCase):
         )
 
     def test_late_edition_suppresses_history_section(self):
-        self.assertEqual(validator.validate(build_mail(hour="23", history=False), date(2026, 8, 4)), [])
+        self.assertEqual(validator.validate(build_mail(hour="17", history=False), date(2026, 8, 4)), [])
         self.assertIn(
-            "history_section_forbidden_at_23",
-            validator.validate(build_mail(hour="23"), date(2026, 8, 4)),
+            "history_section_forbidden_at_17",
+            validator.validate(build_mail(hour="17"), date(2026, 8, 4)),
         )
 
     def test_global_events_have_hard_maximum(self):

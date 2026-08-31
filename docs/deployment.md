@@ -97,8 +97,8 @@ systemctl list-timers --all daily-brief-subscription.timer daily-brief-agent.tim
 
 默认时间（Asia/Shanghai）：
 
-- 10:45、22:45：订阅预检；
-- 11:00、23:00：开始生成；
+- 04:45、16:45：订阅预检；
+- 05:00、17:00：开始生成；
 - 通过校验后立即发送。
 
 ## 6. 监控

@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from daily_brief_agent import editorial_context as context
 
 
-SAMPLE_MAIL = """Subject: 每日大事与市场简报 - 2026-08-03 23:00 中国时间
+SAMPLE_MAIL = """Subject: 每日大事与市场简报 - 2026-08-03 17:00 中国时间
 <html><body>
 <h2>二、全球重大事件</h2>
 <h3>1.【公共健康】乌干达更新疫情通报</h3>
@@ -25,8 +25,8 @@ SAMPLE_MAIL = """Subject: 每日大事与市场简报 - 2026-08-03 23:00 中国�
 
 class EditorialContextTests(unittest.TestCase):
     def test_parse_brief_extracts_subject_sections_titles_and_links(self):
-        parsed = context.parse_brief(SAMPLE_MAIL, "sent-message-20260803-230003.md")
-        self.assertIn("2026-08-03 23:00", parsed["subject"])
+        parsed = context.parse_brief(SAMPLE_MAIL, "sent-message-20260803-170003.md")
+        self.assertIn("2026-08-03 17:00", parsed["subject"])
         self.assertEqual(parsed["sections"][0]["name"], "全球重大事件")
         self.assertEqual(parsed["sections"][0]["items"][0]["title"], "乌干达更新疫情通报")
         self.assertEqual(parsed["sections"][0]["items"][0]["links"], ["https://example.com/health"])
@@ -36,7 +36,7 @@ class EditorialContextTests(unittest.TestCase):
         self.assertEqual(context._item_title("[科技、科学] 2. 一项研究"), "一项研究")
 
     def test_parse_brief_keeps_section_links_without_h3_items(self):
-        mail = """Subject: 每日大事与市场简报 - 2026-07-29 11:00 中国时间
+        mail = """Subject: 每日大事与市场简报 - 2026-07-29 05:00 中国时间
         <html><body><h2>五、权威智库报告</h2><p>旧版段落报告</p>
         <a href="https://example.org/legacy-report">原文</a></body></html>"""
         parsed = context.parse_brief(mail)
@@ -46,42 +46,42 @@ class EditorialContextTests(unittest.TestCase):
     def test_recent_files_prefer_sent_history_and_fall_back_to_legacy(self):
         with tempfile.TemporaryDirectory() as raw:
             log_dir = Path(raw)
-            (log_dir / "sent-message-20260803-230003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
-            (log_dir / "last-message-20260804-110003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
+            (log_dir / "sent-message-20260803-170003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
+            (log_dir / "last-message-20260804-050003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
             selected = context.recent_message_files(log_dir, limit=6)
-            self.assertEqual([path.name for path in selected], ["sent-message-20260803-230003.md"])
+            self.assertEqual([path.name for path in selected], ["sent-message-20260803-170003.md"])
 
         with tempfile.TemporaryDirectory() as raw:
             log_dir = Path(raw)
-            (log_dir / "last-message-20260804-110003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
+            (log_dir / "last-message-20260804-050003.md").write_text(SAMPLE_MAIL, encoding="utf-8")
             selected = context.recent_message_files(log_dir, limit=6)
-            self.assertEqual([path.name for path in selected], ["last-message-20260804-110003.md"])
+            self.assertEqual([path.name for path in selected], ["last-message-20260804-050003.md"])
 
     def test_recent_files_seed_sent_history_with_older_legacy_messages(self):
         with tempfile.TemporaryDirectory() as raw:
             log_dir = Path(raw)
             for name in (
-                "sent-message-20260804-110003.md",
-                "last-message-20260804-110003.md",
-                "last-message-20260803-230003.md",
-                "last-message-20260803-110003.md",
+                "sent-message-20260804-050003.md",
+                "last-message-20260804-050003.md",
+                "last-message-20260803-170003.md",
+                "last-message-20260803-050003.md",
             ):
                 (log_dir / name).write_text(SAMPLE_MAIL, encoding="utf-8")
             selected = context.recent_message_files(log_dir, limit=3)
             self.assertEqual(
                 [path.name for path in selected],
                 [
-                    "sent-message-20260804-110003.md",
-                    "last-message-20260803-230003.md",
-                    "last-message-20260803-110003.md",
+                    "sent-message-20260804-050003.md",
+                    "last-message-20260803-170003.md",
+                    "last-message-20260803-050003.md",
                 ],
             )
 
     def test_edition_context_uses_shanghai_time_and_market_state(self):
-        morning = datetime(2026, 8, 4, 10, 55, tzinfo=ZoneInfo("Asia/Shanghai"))
-        evening = datetime(2026, 8, 4, 22, 55, tzinfo=ZoneInfo("Asia/Shanghai"))
-        weekend = datetime(2026, 8, 8, 10, 55, tzinfo=ZoneInfo("Asia/Shanghai"))
-        self.assertEqual(context.edition_context(morning)["edition"], "午间版")
+        morning = datetime(2026, 8, 4, 5, 5, tzinfo=ZoneInfo("Asia/Shanghai"))
+        evening = datetime(2026, 8, 4, 17, 5, tzinfo=ZoneInfo("Asia/Shanghai"))
+        weekend = datetime(2026, 8, 8, 5, 5, tzinfo=ZoneInfo("Asia/Shanghai"))
+        self.assertEqual(context.edition_context(morning)["edition"], "早间版")
         self.assertEqual(context.edition_context(evening)["edition"], "晚间版")
         self.assertEqual(context.edition_context(morning)["market_rule"], "weekday_morning")
         self.assertEqual(context.edition_context(evening)["market_rule"], "weekday_evening")
@@ -98,9 +98,9 @@ class EditorialContextTests(unittest.TestCase):
         self.assertEqual(events[1]["year"], 1914)
 
     def test_render_context_contains_repeat_windows_and_history_candidates(self):
-        parsed = context.parse_brief(SAMPLE_MAIL, "sent-message-20260803-230003.md")
+        parsed = context.parse_brief(SAMPLE_MAIL, "sent-message-20260803-170003.md")
         rendered = context.render_context(
-            context.edition_context(datetime(2026, 8, 4, 10, 55, tzinfo=ZoneInfo("Asia/Shanghai"))),
+            context.edition_context(datetime(2026, 8, 4, 5, 5, tzinfo=ZoneInfo("Asia/Shanghai"))),
             [parsed],
             [{"year": 1914, "text": "一项历史事件", "languages": ["zh"], "pages": []}],
             [],
@@ -112,12 +112,12 @@ class EditorialContextTests(unittest.TestCase):
 
     def test_render_context_includes_legacy_section_links_without_items(self):
         legacy = context.parse_brief(
-            """Subject: 每日大事与市场简报 - 2026-07-29 11:00 中国时间
+            """Subject: 每日大事与市场简报 - 2026-07-29 05:00 中国时间
             <html><body><h2>五、权威智库报告</h2><p>旧版智库摘要</p>
             <a href="https://example.org/legacy">原文</a></body></html>"""
         )
         rendered = context.render_context(
-            context.edition_context(datetime(2026, 8, 4, 10, 55, tzinfo=ZoneInfo("Asia/Shanghai"))),
+            context.edition_context(datetime(2026, 8, 4, 5, 5, tzinfo=ZoneInfo("Asia/Shanghai"))),
             [legacy], [], [],
         )
         self.assertIn("旧版智库摘要", rendered)
