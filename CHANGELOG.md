@@ -12,6 +12,13 @@
 - 验证：<测试、校验或未验证边界>
 ```
 
+## 2026-09-27 · chore: default to GPT-6 Luna in runtime example
+
+- 提交：`chore: default to GPT-6 Luna in runtime example`（提交前记录）
+- 栏目/模块：Codex runtime 配置示例
+- 更新：将示例模型从 `gpt-5` 切换为 `gpt-6-luna`；保留 `CODEX_REASONING_EFFORT=high`。
+- 验证：Codex CLI 0.156.1 上 GPT-6 Luna/max 只读短请求成功；未运行日报生成或邮件发送流程。
+
 ## 2026-08-31 · feat: move daily brief to 05:00 and 17:00 China time
 
 - 提交：`9d63744`
